@@ -20,7 +20,9 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/v1/health"]
+      # 127.0.0.1, а не localhost: BusyBox-wget резолвит localhost в ::1,
+      # а uvicorn слушает только IPv4 (0.0.0.0) — было connection refused
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -51,7 +53,7 @@ services:
       app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 3
