@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Environment secrets
+.env
+
+# SQLite databases (включая WAL/SHM-файлы)
+*.db
+*.db-wal
+*.db-shm
+
+# Docker data volumes (если запускают без named volumes)
+data/
+sqlite-data/
+redis-data/
+
+# Node (не используется, но на всякий случай)
+node_modules/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
