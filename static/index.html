@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ShortURL 2000 — анонимный сокращатель ссылок с аналитикой. Работает на моём сервере!">
+    <title>ShortURL 2000 :: сокращатель ссылок</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="page">
+
+    <!-- ======================= ШАПКА ======================= -->
+    <header class="panel win-panel header-panel">
+        <div class="win-caption">
+            <span class="win-caption-title">&#9889; ShortURL 2000 &mdash; [окно программы]</span>
+            <span class="win-caption-btns" aria-hidden="true">
+                <span class="cap-btn">_</span><span class="cap-btn">&#9633;</span><span class="cap-btn cap-close">&times;</span>
+            </span>
+        </div>
+        <div class="header-body">
+            <h1 class="site-title">Short<span class="accent">URL</span> 2000<span class="title-caret" aria-hidden="true">_</span></h1>
+            <p class="site-tagline">:: лучший сокращатель ссылок в рунете :: анонимно :: бесплатно :: без SMS ::</p>
+        </div>
+    </header>
+
+    <main class="layout">
+
+        <!-- ======================= ЛЕВАЯ КОЛОНКА: ФОРМА ======================= -->
+        <section class="panel win-panel main-panel" aria-label="Форма сокращения ссылки">
+            <div class="win-caption"><span class="win-caption-title">&#128279; Сократить ссылку</span></div>
+            <div class="panel-body">
+
+                <form id="shorten-form" autocomplete="off" novalidate>
+                    <div class="field-shell" id="url-field">
+                        <label class="field-label" for="url-input" id="url-label">
+                            <span class="label-text">Вставьте длинный URL&nbsp;:</span>
+                        </label>
+                        <div class="input-frame">
+                            <input
+                                type="text"
+                                id="url-input"
+                                name="original_url"
+                                spellcheck="false"
+                                aria-describedby="url-hint"
+                            >
+                            <span class="fake-caret" id="fake-caret" aria-hidden="true">|</span>
+                        </div>
+                        <p class="field-hint" id="url-hint">только http:// и https:// &middot; до 2048 символов</p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="shorten-btn">
+                        <span class="btn-glyph">&#9986;</span> Сократить!
+                    </button>
+                </form>
+
+                <!-- Ошибка -->
+                <div id="error-box" class="error-box hidden" role="alert"></div>
+
+                <!-- Результат -->
+                <div id="result" class="result-box hidden" aria-live="polite">
+                    <div class="result-caption">&#128077; Ваша ссылка готова!</div>
+                    <div class="short-line">
+                        <a id="short-link" class="short-link mono" href="#" target="_blank" rel="noopener" title="Открыть в новой вкладке"></a>
+                    </div>
+                    <div class="result-actions">
+                        <button type="button" class="btn" id="copy-btn">&#128203; Копировать</button>
+                        <button type="button" class="btn" id="stats-btn">&#128202; Статистика</button>
+                        <button type="button" class="btn btn-danger" id="delete-btn">&#10060; Удалить</button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ======================= ПРАВАЯ КОЛОНКА: САЙДБАР ======================= -->
+        <aside class="sidebar">
+
+            <!-- Мем №1: ASCII «works on my machine» -->
+            <section class="panel win-panel" aria-label="Мем про программирование">
+                <div class="win-caption"><span class="win-caption-title">&#128512; Байка №1</span></div>
+                <div class="panel-body meme-body">
+<pre class="ascii-meme" aria-label="Мем: работает на моей машине">
+ +--------------------------+
+ |   WORKS ON MY MACHINE    |
+ |         (c) 2004         |
+ +--------------------------+
+      \   ^__^
+       \  (oo)\_______
+          (__)\       )\/\
+              ||----w |
+              ||     ||
+</pre>
+                    <p class="meme-note">&mdash; У меня всё работает!<br>&mdash; А у клиента &mdash; нет.<br>&mdash; Значит, клиент не машина. &copy; народная мудрость CI/CD</p>
+                </div>
+            </section>
+
+            <!-- Мем №2: байка про батоны -->
+            <section class="panel win-panel" aria-label="Байка про программиста">
+                <div class="win-caption"><span class="win-caption-title">&#127839; Байка №2</span></div>
+                <div class="panel-body meme-body">
+                    <p>Жена отправляет программиста в магазин:</p>
+                    <p class="mono quote">&mdash; Купи батон хлеба. Если будут яйца &mdash; возьми десяток.</p>
+                    <p>Программист возвращается с десятью батонами:</p>
+                    <p class="mono quote">&mdash; Яйца были.</p>
+                </div>
+            </section>
+
+            <!-- Проверка статистики по коду -->
+            <section class="panel win-panel" aria-label="Проверка статистики по коду">
+                <div class="win-caption"><span class="win-caption-title">&#128269; Чужая статистика</span></div>
+                <div class="panel-body">
+                    <p class="small-note">Знаете код ссылки? Введите 7 символов:</p>
+                    <div class="input-frame compact">
+                        <input type="text" id="stats-code-input" class="mono" maxlength="7" spellcheck="false" placeholder="aB3xK9z">
+                    </div>
+                    <button type="button" class="btn" id="stats-code-btn">Показать &raquo;</button>
+                </div>
+            </section>
+
+            <!-- Ретро-счётчик посещений -->
+            <section class="panel win-panel" aria-label="Счётчик посещений">
+                <div class="win-caption"><span class="win-caption-title">&#128200; Посетителей</span></div>
+                <div class="panel-body counter-body">
+                    <span id="visit-counter" class="counter mono" title="Вы посетитель №&hellip;">000000</span>
+                    <p class="small-note">счётчик крутится с 01.01.2004*</p>
+                    <p class="small-note disclaimer">* нет</p>
+                </div>
+            </section>
+
+        </aside>
+    </main>
+
+    <!-- ======================= ПОДВАЛ ======================= -->
+    <footer class="panel win-panel footer-panel">
+        <div class="footer-inner">
+            <span>&copy; 2004&ndash;2026 ShortURL 2000 Labs. Все права защищены, куда без них.</span>
+            <span class="mono">powered by FastAPI + SQLite + Redis + nginx</span>
+            <span>Best viewed in Netscape Navigator 4.0 at 800&times;600 :)</span>
+        </div>
+    </footer>
+</div>
+
+<!-- ======================= МОДАЛКА СТАТИСТИКИ ======================= -->
+<div id="stats-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="panel win-panel modal-dialog">
+        <div class="win-caption">
+            <span class="win-caption-title" id="modal-title">&#128202; Статистика ссылки <span class="mono" id="modal-code-label"></span></span>
+            <span class="win-caption-btns">
+                <button type="button" class="cap-btn cap-close" id="modal-close-x" title="Закрыть (Esc)">&times;</button>
+            </span>
+        </div>
+        <div class="panel-body modal-body">
+
+            <div id="modal-error" class="error-box hidden"></div>
+
+            <dl class="stats-meta">
+                <dt>Короткая ссылка:</dt>
+                <dd><a id="m-short" class="short-link mono" href="#" target="_blank" rel="noopener"></a></dd>
+                <dt>Оригинальный URL:</dt>
+                <dd id="m-original" class="mono wrap-anywhere"></dd>
+                <dt>Создана (UTC):</dt>
+                <dd id="m-created" class="mono"></dd>
+            </dl>
+
+            <div class="clicks-total">
+                Всего переходов: <span id="m-clicks" class="clicks-number mono">0</span>
+            </div>
+
+            <table class="stats-table" id="stats-table">
+                <thead>
+                    <tr>
+                        <th class="col-country">&#127757; Страна</th>
+                        <th class="col-count">Переходов</th>
+                        <th class="col-bar">&nbsp;</th>
+                    </tr>
+                </thead>
+                <tbody id="m-countries">
+                    <tr class="empty-row"><td colspan="3">нет данных &mdash; по ссылке ещё никто не ходил</td></tr>
+                </tbody>
+            </table>
+
+            <div class="modal-actions">
+                <button type="button" class="btn" id="m-refresh">&#128260; Обновить</button>
+                <button type="button" class="btn" id="m-close">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
