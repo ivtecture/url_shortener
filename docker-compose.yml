@@ -1,0 +1,61 @@
+# Три сервиса на Alpine (docs/ARCHITECTURE.md, раздел 7.1).
+# Наружу опубликован только nginx :80; app и redis — во внутренней сети.
+
+services:
+  app:
+    build: .                                    # Dockerfile: python:3.12-alpine
+    container_name: urlshortener-app
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/urlshortener.db
+      REDIS_URL: redis://redis:6379/0
+      GEO_API_URL: http://ip-api.com/json/{ip}?fields=status,countryCode
+      CACHE_TTL_SECONDS: "3600"
+      GEO_CACHE_TTL_SECONDS: "86400"
+      GEO_TIMEOUT_SECONDS: "2"
+      BASE_URL: http://localhost                 # база для short_url в ответах API
+    volumes:
+      - sqlite-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: urlshortener-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  nginx:
+    build: ./nginx                              # FROM nginx:1.27-alpine + nginx.conf
+    container_name: urlshortener-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"                                 # единственный вход снаружи
+    volumes:
+      - ./static:/usr/share/nginx/html:ro       # статику раздаёт сам nginx
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  sqlite-data:                                  # файл БД переживает пересборку
+  redis-data:                                   # AOF-персистентность кэша (тёплый старт)
