@@ -89,6 +89,37 @@ docker compose down -v
 ```
 Удаляет тома `sqlite-data` и `redis-data` — все ссылки и статистика будут стёрты.
 
+### Публичный доступ через Cloudflare Quick Tunnel
+
+Даёт публичный HTTPS-адрес для сервиса без проброса портов, настройки firewall и статического IP. URL живёт, пока работает процесс `cloudflared`. Регистрация не нужна.
+
+**Вариант 1 — на хосте (Windows).** Установите cloudflared и запустите туннель (система должна быть запущена: `docker compose up -d`):
+```cmd
+winget install Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:80
+```
+В консоли появится адрес вида `https://random-words-1234.trycloudflare.com` — им можно делиться. Остановка: `Ctrl+C` в консоли туннеля.
+
+**Вариант 2 — без установки на хост:** добавьте сервис в `docker-compose.yml`:
+```yaml
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --url http://nginx:80
+    restart: unless-stopped
+    depends_on:
+      nginx:
+        condition: service_healthy
+```
+URL смотреть в логах (строка `https://....trycloudflare.com`):
+```cmd
+docker compose logs tunnel
+```
+
+**Примечания:**
+* Веб-интерфейс подхватывает адрес туннеля автоматически (short-ссылки строятся от текущего origin).
+* Если дергать API напрямую через туннель, поправьте `BASE_URL` в `docker-compose.yml` (или `.env`) на URL туннеля, чтобы поле `short_url` в ответах было корректным.
+* ⚠️ Туннель открывает сервис всему интернету, авторизации нет — любой сможет удалять ссылки. Только для демо.
+
 ## Проверка API
 
 Все примеры выполнялись реальными запросами (cmd.exe, curl). `short_code` подставляйте свой из ответа создания.
