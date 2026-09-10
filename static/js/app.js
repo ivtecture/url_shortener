@@ -6,6 +6,7 @@
    4) модалка статистики -> GET /api/v1/links/{code}/stats
    5) удаление         -> DELETE /api/v1/links/delete/{code}
    6) ретро-счётчик посещений (localStorage)
+   7) QR-код           -> GET /api/v1/links/{code}/qr (PNG, <img> + скачать)
    ============================================================ */
 "use strict";
 
@@ -116,12 +117,41 @@ const shortLink = $("short-link");
 const copyBtn = $("copy-btn");
 const deleteBtn = $("delete-btn");
 const statsBtn = $("stats-btn");
+const qrBtn = $("qr-btn");
+const qrBox = $("qr-box");
+const qrImg = $("qr-img");
+const qrDownload = $("qr-download");
 let currentCode = null;
+
+/* QR-URL строим только из валидированного кода (encodeURIComponent),
+   в DOM вставляем через свойства src/href/download (без innerHTML) — XSS-безопасно. */
+function qrUrlFor(code) {
+    return "/api/v1/links/" + encodeURIComponent(code) + "/qr";
+}
+
+function hideQrBox() {
+    if (!qrBox) return;
+    qrBox.classList.add("hidden");
+    if (qrImg) qrImg.removeAttribute("src");
+    if (qrDownload) qrDownload.removeAttribute("href");
+}
+
+function showQrBox() {
+    if (!currentCode || !qrBox) return;
+    const url = qrUrlFor(currentCode);
+    if (qrImg) qrImg.src = url;
+    if (qrDownload) {
+        qrDownload.href = url;
+        qrDownload.download = currentCode + "-qr.png";
+    }
+    qrBox.classList.remove("hidden");
+}
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
     hideError(errorBox);
     resultBox.classList.add("hidden");
+    hideQrBox();
     currentCode = null;
 
     const value = urlInput.value.trim();
@@ -147,8 +177,7 @@ form.addEventListener("submit", async (event) => {
             shortLink.href = data.short_url;
             resultBox.classList.remove("hidden");
             urlInput.select();
-        } else {
-            const err = await res.json().catch(() => ({}));
+        } else {            const err = await res.json().catch(() => ({}));
             showError(errorBox, extractErrorMessage(err.detail, "Ошибка " + res.status));
         }
     } catch (networkError) {
@@ -180,6 +209,19 @@ copyBtn.addEventListener("click", async () => {
     window.setTimeout(() => (copyBtn.textContent = old), 1500);
 });
 
+/* ---------- 3b) QR-код в блоке результата ---------- */
+
+if (qrBtn) {
+    qrBtn.addEventListener("click", () => {
+        if (!currentCode) return;
+        if (!qrBox.classList.contains("hidden")) {
+            hideQrBox();
+        } else {
+            showQrBox();
+        }
+    });
+}
+
 /* ---------- 4) Модалка статистики ---------- */
 
 const modal = $("stats-modal");
@@ -190,6 +232,8 @@ const mShort = $("m-short");
 const mOriginal = $("m-original");
 const mCreated = $("m-created");
 const modalCodeLabel = $("modal-code-label");
+const mQr = $("m-qr");
+const mQrDownload = $("m-qr-download");
 let modalCode = null;
 
 function openModal(code) {
@@ -203,6 +247,12 @@ function openModal(code) {
     mShort.href = BASE_URL + "/" + code;
     mOriginal.textContent = "";
     mCreated.textContent = "";
+    /* QR модалки: тот же endpoint, XSS-безопасно через свойства src/href */
+    if (mQr) mQr.src = qrUrlFor(code);
+    if (mQrDownload) {
+        mQrDownload.href = qrUrlFor(code);
+        mQrDownload.download = code + "-qr.png";
+    }
     modal.classList.remove("hidden");
     loadStats();
 }
@@ -210,6 +260,8 @@ function openModal(code) {
 function closeModal() {
     modal.classList.add("hidden");
     modalCode = null;
+    if (mQr) mQr.removeAttribute("src");
+    if (mQrDownload) mQrDownload.removeAttribute("href");
 }
 
 async function loadStats() {
@@ -288,6 +340,7 @@ deleteBtn.addEventListener("click", async () => {
         });
         if (res.ok) {
             resultBox.classList.add("hidden");
+            hideQrBox();
             currentCode = null;
             alert("Ссылка удалена. Момент молчания по её переходам...");
         } else {

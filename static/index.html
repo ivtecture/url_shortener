@@ -65,8 +65,15 @@
                     </div>
                     <div class="result-actions">
                         <button type="button" class="btn" id="copy-btn">&#128203; Копировать</button>
+                        <button type="button" class="btn" id="qr-btn">&#129779; QR-код</button>
                         <button type="button" class="btn" id="stats-btn">&#128202; Статистика</button>
                         <button type="button" class="btn btn-danger" id="delete-btn">&#10060; Удалить</button>
+                    </div>
+                    <div id="qr-box" class="qr-box hidden" aria-live="polite">
+                        <img id="qr-img" class="qr-img" alt="QR-код короткой ссылки" width="160" height="160">
+                        <div class="qr-actions">
+                            <a id="qr-download" class="btn qr-download" href="#" download>Скачать PNG</a>
+                        </div>
                     </div>
                 </div>
 
@@ -165,6 +172,14 @@
 
             <div class="clicks-total">
                 Всего переходов: <span id="m-clicks" class="clicks-number mono">0</span>
+            </div>
+
+            <div class="qr-block" aria-label="QR-код ссылки">
+                <div class="qr-caption">&#129779; QR-код ссылки</div>
+                <img id="m-qr" class="qr-img" alt="QR-код короткой ссылки" width="140" height="140">
+                <div class="qr-actions">
+                    <a id="m-qr-download" class="btn qr-download" href="#" download>Скачать PNG</a>
+                </div>
             </div>
 
             <table class="stats-table" id="stats-table">
