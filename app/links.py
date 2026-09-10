@@ -6,11 +6,13 @@
 `/openapi.json` добавляются ещё в конструкторе приложения — конфликтов нет.
 """
 
+import io
 import sqlite3
 from urllib.parse import urlparse
 
+import qrcode
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from app.cache import cache
 from app.config import settings
@@ -210,6 +212,60 @@ async def get_stats(short_code: str) -> StatsResponse:
         created_at=link["created_at"],
         clicks=clicks,
         countries=countries,
+    )
+
+
+# ---------------------------------------------- GET /api/v1/links/{short_code}/qr
+@router.get(
+    "/api/v1/links/{short_code}/qr",
+    summary="QR-код короткой ссылки (PNG)",
+    responses={
+        200: {"content": {"image/png": {}}, "description": "PNG с QR-кодом short_url"},
+        404: {"description": "Ссылка не найдена"},
+    },
+)
+async def get_qr(short_code: str) -> Response:
+    """Сгенерировать PNG QR-код для существующей короткой ссылки.
+
+    - Формат кода валидируем как редирект (base62, 7 символов) -> 404 без БД/кэша.
+    - Существование проверяем: Redis url:{code}, затем SQLite; нет -> 404.
+    - Кодируем полный short_url через build_short_url (BASE_URL), как в create.
+    - QR в Redis не кэшируем (генерация дешёвая, код иммутабелен пока жив);
+      HTTP-кэш `Cache-Control: public, max-age=3600` достаточен.
+      После DELETE код исчезает из БД/кэша -> здесь автоматически 404,
+      отдельная инвалидация QR не нужна.
+    - Логику create/redirect/stats/delete/health не меняем.
+    """
+    if not is_valid_short_code(short_code):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ссылка не найдена")
+
+    found = False
+    cached = await cache.get(url_cache_key(short_code))
+    if cached is not None:
+        prefix, sep, rest = cached.partition(":")
+        if sep and prefix.isdigit() and rest:
+            found = True
+    if not found:
+        row = await db.fetch_one(
+            "SELECT 1 AS ok FROM links WHERE short_code = ?", (short_code,)
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Ссылка не найдена"
+            )
+        found = True
+
+    short_url = build_short_url(short_code)
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(short_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 
