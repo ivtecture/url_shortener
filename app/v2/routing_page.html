@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Переход...</title>
+    <style>
+        :root {
+            --bg: #0f1220;
+            --card: #1b1f33;
+            --text: #eef0f6;
+            --muted: #9aa1b4;
+            --accent: #6366f1;
+            --accent-hover: #8185f4;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background: radial-gradient(1200px 600px at 50% -10%, #262b4c 0%, var(--bg) 55%);
+        }
+        .routing {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .timer-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .timer-wrap { position: relative; width: 140px; height: 140px; }
+        .ring { transform: rotate(-90deg); }
+        .ring-bg  { fill: none; stroke: #2a2f4d; stroke-width: 8; }
+        .ring-progress {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+        .timer-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+            font-weight: 700;
+        }
+        .timer-note {
+            margin-top: 14px;
+            font-size: 14px;
+            color: var(--muted);
+        }
+        .ad-wrap {
+            width: 100%;
+            margin-top: 28px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, .06);
+        }
+        .ad {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+        .ad-caption {
+            padding: 12px 16px;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--text);
+            background: var(--card);
+            border-top: 1px solid rgba(255, 255, 255, .06);
+        }
+        .continue {
+            margin-top: 28px;
+            padding: 13px 34px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            background: var(--accent);
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: background .15s ease, transform .05s ease;
+        }
+        .continue:hover { background: var(--accent-hover); }
+        .continue:active { transform: translateY(1px); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<main class="routing">
+
+    <div class="timer-view" id="timer-view">
+        <div class="timer-wrap" id="timer-wrap">
+            <svg class="ring" width="140" height="140" viewBox="0 0 140 140">
+                <circle class="ring-bg" cx="70" cy="70" r="62"></circle>
+                <circle class="ring-progress" id="progress" cx="70" cy="70" r="62"></circle>
+            </svg>
+            <div class="timer-label" id="timer-label">5</div>
+        </div>
+        <button type="button" class="continue hidden" id="continue-btn">Продолжить &rarr;</button>
+        <p class="timer-note" id="timer-note">Ссылка скоро откроется</p>
+    </div>
+
+    <div class="ad-wrap">
+        <img class="ad" id="ad-image" src="{{.AdImage}}" alt="Реклама">
+        {{if .AdText}}<div class="ad-caption" id="ad-caption">{{.AdText}}</div>{{end}}
+    </div>
+
+</main>
+
+<script>
+    "use strict";
+    var TARGET_URL = "{{.TargetURL}}";
+    var DURATION = 5;
+    var CIRC = 2 * Math.PI * 62;
+
+    var progress = document.getElementById("progress");
+    var label = document.getElementById("timer-label");
+    progress.style.strokeDasharray = CIRC;
+    progress.style.strokeDashoffset = 0;
+
+    function finish() {
+        document.getElementById("timer-wrap").classList.add("hidden");
+        document.getElementById("timer-note").classList.add("hidden");
+        document.getElementById("continue-btn").classList.remove("hidden");
+    }
+
+    var start = null;
+    function frame(now) {
+        if (start === null) start = now;
+        var elapsed = (now - start) / 1000;
+        if (elapsed >= DURATION) {
+            progress.style.strokeDashoffset = CIRC;
+            finish();
+            return;
+        }
+        progress.style.strokeDashoffset = CIRC * (elapsed / DURATION);
+        var remaining = DURATION - elapsed;
+        label.textContent = Math.ceil(remaining);
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    document.getElementById("continue-btn").addEventListener("click", function () {
+        window.location.href = TARGET_URL;
+    });
+</script>
+</body>
+</html>

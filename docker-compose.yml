@@ -1,5 +1,6 @@
-# Три сервиса на Alpine (docs/ARCHITECTURE.md, раздел 7.1).
-# Наружу опубликован только nginx :80; app и redis — во внутренней сети.
+# Сервисы на Alpine: python-app (сохранён, трафик не получает),
+# Go-v2 (обслуживает API), redis и nginx (docs/ARCHITECTURE.md, раздел 7.1).
+# Наружу опубликован только nginx :80; app, v2 и redis — во внутренней сети.
 
 services:
   app:
@@ -28,6 +29,37 @@ services:
       retries: 3
       start_period: 10s
 
+  # Go-v2: обслуживает API и короткие ссылки (nginx проксирует сюда).
+  # Python-сервис app сохранён для справки и не получает трафик.
+  v2:
+    build: ./app/v2                               # app/v2/Dockerfile (golang:1.27-alpine)
+    container_name: urlshortener-v2
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/urlshortener.db
+      REDIS_URL: redis://redis:6379/0
+      GEO_API_URL: http://ip-api.com/json/{ip}?fields=status,countryCode
+      CACHE_TTL_SECONDS: "3600"
+      GEO_CACHE_TTL_SECONDS: "86400"
+      GEO_TIMEOUT_SECONDS: "2"
+      BASE_URL: http://localhost                 # база для short_url в ответах API
+      AD_IMAGES_FILE: /static/ads/ad_images.txt # пул баннеров из static/ads/ (по строке на файл)
+      AD_TEXTS_FILE: /static/ads/ad_texts.txt    # подписи под баннером (по строке на файл)
+      ROUTING_PAGE_FILE: /templates/routing_page.html  # страница перехода (live-редактирование)
+    volumes:
+      - sqlite-data:/data
+      - ./static:/static:ro                      # ad_texts.txt читается прямо из static/
+      - ./app/v2:/templates:ro                   # routing_page.html — без пересборки
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/api/v2/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   redis:
     image: redis:7-alpine
     container_name: urlshortener-redis
@@ -50,10 +82,10 @@ services:
     volumes:
       - ./static:/usr/share/nginx/html:ro       # статику раздаёт сам nginx
     depends_on:
-      app:
+      v2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/v2/health"]
       interval: 30s
       timeout: 5s
       retries: 3
