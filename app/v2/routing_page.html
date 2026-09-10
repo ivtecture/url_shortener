@@ -73,6 +73,9 @@
             width: 100%;
             height: auto;
         }
+        .ad-link {
+            display: block;
+        }
         .ad-caption {
             padding: 12px 16px;
             font-size: 24px;
@@ -114,7 +117,7 @@
     </div>
 
     <div class="ad-wrap">
-        <img class="ad" id="ad-image" src="{{.AdImage}}" alt="Реклама">
+        {{if .AdLink}}<a class="ad-link" href="{{.AdLink}}" target="_blank" rel="noopener noreferrer"><img class="ad" id="ad-image" src="{{.AdImage}}" alt="Реклама"></a>{{else}}<img class="ad" id="ad-image" src="{{.AdImage}}" alt="Реклама">{{end}}
         {{if .AdText}}<div class="ad-caption" id="ad-caption">{{.AdText}}</div>{{end}}
     </div>
 

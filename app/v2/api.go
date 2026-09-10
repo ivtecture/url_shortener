@@ -30,6 +30,7 @@ var routingPageTmpl = template.Must(template.ParseFS(routingPageFS, "routing_pag
 type routingPageData struct {
 	TargetURL string
 	AdImage   string
+	AdLink    string
 	AdText    string
 }
 
@@ -117,10 +118,10 @@ func (s *Server) renderRoutingPage(w http.ResponseWriter, data routingPageData) 
 	}
 }
 
-// adFiles читается из static/ads/ad_images.txt на каждый запрос,
-// чтобы правки списка баннеров применялись без рестарта сервиса.
-func (s *Server) adFiles() []string {
-	return loadAdFiles(s.cfg)
+// adEntries читается из static/ads/ad_images.txt на каждый запрос,
+// чтобы правки списка баннеров и их ссылок применялись без рестарта.
+func (s *Server) adEntries() []adEntry {
+	return loadAdEntries(s.cfg)
 }
 
 // adTexts читается из файла на каждый запрос, чтобы правки
@@ -232,8 +233,11 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	go s.recordClick(linkID, ip)
 
 	ad := "/ads/ad1.svg"
-	if files := s.adFiles(); len(files) > 0 {
-		ad = "/ads/" + files[rand.Intn(len(files))]
+	var adLink string
+	if entries := s.adEntries(); len(entries) > 0 {
+		entry := entries[rand.Intn(len(entries))]
+		ad = "/ads/" + entry.Image
+		adLink = entry.Link
 	}
 	adText := ""
 	if texts := s.adTexts(); len(texts) > 0 {
@@ -246,6 +250,7 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	s.renderRoutingPage(w, routingPageData{
 		TargetURL: originalURL,
 		AdImage:   ad,
+		AdLink:    adLink,
 		AdText:    adText,
 	})
 }

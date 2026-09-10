@@ -70,26 +70,48 @@ func loadConfig() Config {
 	}
 }
 
-func loadAdFiles(cfg Config) []string {
+type adEntry struct {
+	Image string
+	Link  string
+}
+
+func parseAdLine(line string) adEntry {
+	image, link, _ := strings.Cut(line, "|")
+	return adEntry{Image: strings.TrimSpace(image), Link: strings.TrimSpace(link)}
+}
+
+func loadAdEntries(cfg Config) []adEntry {
 	if cfg.AdImagesFile == "" {
-		return cfg.AdsFiles
+		var out []adEntry
+		for _, f := range cfg.AdsFiles {
+			out = append(out, adEntry{Image: f})
+		}
+		return out
 	}
 	data, err := os.ReadFile(cfg.AdImagesFile)
 	if err != nil {
-		return cfg.AdsFiles
+		var out []adEntry
+		for _, f := range cfg.AdsFiles {
+			out = append(out, adEntry{Image: f})
+		}
+		return out
 	}
-	var out []string
+	var out []adEntry
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		out = append(out, line)
+		out = append(out, parseAdLine(line))
 	}
 	if len(out) > 0 {
 		return out
 	}
-	return cfg.AdsFiles
+	var fallback []adEntry
+	for _, f := range cfg.AdsFiles {
+		fallback = append(fallback, adEntry{Image: f})
+	}
+	return fallback
 }
 
 func loadAdTexts(cfg Config) []string {
