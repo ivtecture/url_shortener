@@ -1,8 +1,7 @@
-"""Обёртка над redis.asyncio.
+"""Redis-кэш с graceful-деградацией: Redis — кэш, а не source of truth.
 
-Redis — кэш, а не source of truth (docs/ARCHITECTURE.md, риск №8):
-при недоступности сервера все операции молча деградируют
-(GET -> None = промах, SET -> пропуск), сервис продолжает работать на SQLite.
+temp-links: TTL ключей url:{code} не может превышать срок жизни самой ссылки,
+поэтому setex вызывается с min(cache_ttl, до expires_at) — см. links.py.
 """
 
 import redis.asyncio as aioredis
@@ -11,12 +10,10 @@ from app.config import settings
 
 
 class Cache:
-    """Тонкая обёртка с graceful-деградацией при падении Redis."""
-
     def __init__(self, url: str) -> None:
         self._redis = aioredis.from_url(
             url,
-            decode_responses=True,  # str вместо bytes
+            decode_responses=True,
             socket_connect_timeout=2,
             socket_timeout=2,
         )
@@ -29,21 +26,18 @@ class Cache:
             return None
 
     async def setex(self, key: str, ttl_seconds: int, value: str) -> None:
-        """Записать значение с TTL. Ошибки (в т.ч. READONLY) не роняют запрос."""
         try:
             await self._redis.setex(key, ttl_seconds, value)
         except aioredis.RedisError:
             pass
 
     async def delete(self, key: str) -> None:
-        """Инвалидация ключа (после удаления ссылки)."""
         try:
             await self._redis.delete(key)
         except aioredis.RedisError:
             pass
 
     async def ping(self) -> bool:
-        """Проверка живости для /api/v1/health."""
         try:
             return bool(await self._redis.ping())
         except aioredis.RedisError:

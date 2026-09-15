@@ -1,4 +1,4 @@
-# URL Shortener — FastAPI-приложение (docs/ARCHITECTURE.md, раздел 7)
+# Temporary Short Links — FastAPI-приложение
 FROM python:3.12-alpine
 
 # Не писать .pyc и не буферизовать stdout — логи видны сразу

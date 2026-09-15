@@ -1,10 +1,15 @@
-# Три сервиса на Alpine (docs/ARCHITECTURE.md, раздел 7.1).
-# Наружу опубликован только nginx :80; app и redis — во внутренней сети.
+# Три сервиса на Alpine. Наружу опубликован только nginx :80;
+# app и redis — во внутренней сети.
+#
+# Новое для ветки temp-links (временные ссылки):
+#   DEFAULT_TTL_SECONDS      — срок жизни ссылки по умолчанию (1 час)
+#   MAX_TTL_SECONDS          — потолок TTL (7 дней)
+#   CLEANUP_INTERVAL_SECONDS — период фоновой чистки просроченных (5 минут)
 
 services:
   app:
-    build: .                                    # Dockerfile: python:3.12-alpine
-    container_name: urlshortener-app
+    build: .
+    container_name: vremyanka-app
     restart: unless-stopped
     environment:
       DATABASE_PATH: /data/urlshortener.db
@@ -13,7 +18,11 @@ services:
       CACHE_TTL_SECONDS: "3600"
       GEO_CACHE_TTL_SECONDS: "86400"
       GEO_TIMEOUT_SECONDS: "2"
-      BASE_URL: http://localhost                 # база для short_url в ответах API
+      BASE_URL: http://localhost
+      DEFAULT_TTL_SECONDS: "3600"
+      MIN_TTL_SECONDS: "60"
+      MAX_TTL_SECONDS: "604800"
+      CLEANUP_INTERVAL_SECONDS: "300"
     volumes:
       - sqlite-data:/data
     depends_on:
@@ -30,7 +39,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: urlshortener-redis
+    container_name: vremyanka-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
@@ -42,8 +51,8 @@ services:
       retries: 3
 
   nginx:
-    build: ./nginx                              # FROM nginx:1.27-alpine + nginx.conf
-    container_name: urlshortener-nginx
+    build: ./nginx
+    container_name: vremyanka-nginx
     restart: unless-stopped
     ports:
       - "80:80"                                 # единственный вход снаружи
