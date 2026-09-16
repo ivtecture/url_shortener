@@ -3,7 +3,11 @@
 Правила валидации POST /api/v1/links:
 - пустое поле / не-JSON / не-URL  -> 422 (pydantic автоматически);
 - схема не http/https или длина > 2048 -> 400 (проверяется в роутере,
-  чтобы вернуть текст ошибки из спецификации).
+  чтобы вернуть текст ошибки из спецификации);
+- max_clicks не int / <= 0 / > 1_000_000 -> 422 (pydantic автоматически).
+
+Исчерпанный лимит переходов обрабатывается на редиректе: 410 Gone
+и удаление ссылки (app/links.py, redirect_to_original).
 """
 
 from urllib.parse import urlparse
@@ -15,6 +19,15 @@ class LinkCreate(BaseModel):
     """Тело POST /api/v1/links."""
 
     original_url: str = Field(..., min_length=1, description="Длинный URL для сокращения")
+
+    # Лимит переходов (вариант 9): после N переходов ссылка удаляется.
+    # Не задан (None) — ссылка бессрочная. Границы: 1..1_000_000.
+    max_clicks: int | None = Field(
+        None,
+        gt=0,
+        le=1_000_000,
+        description="Лимит переходов: после N-го перехода ссылка удалится. Не задан — без лимита",
+    )
 
     @field_validator("original_url")
     @classmethod
@@ -38,6 +51,8 @@ class LinkResponse(BaseModel):
     short_url: str
     original_url: str
     created_at: str
+    max_clicks: int | None = None
+    clicks_left: int | None = None
 
 
 class CountryClicks(BaseModel):
@@ -55,6 +70,8 @@ class StatsResponse(BaseModel):
     created_at: str
     clicks: int
     countries: list[CountryClicks]
+    max_clicks: int | None = None
+    clicks_left: int | None = None
 
 
 class DeleteResponse(BaseModel):

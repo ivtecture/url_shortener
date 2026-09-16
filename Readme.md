@@ -11,6 +11,7 @@
 2. Редирект по короткой ссылке на оригинальный URL
 3. Сбор аналитики: количество переходов, геолокация
 4. Без регистрации
+5. Ограничение количества переходов (вариант 9): необязательный лимит `max_clicks` — после N-го перехода ссылка сообщает «лимит исчерпан» (410) и удаляется
 
 ## Интерфейс
 Стиль 2000. Статистика урла в модалке. Добавить мем про программирование. Приглушенные, холодные тона. Вводные строчки с офигительной анимацией.
@@ -43,6 +44,7 @@ CREATE TABLE links (
     id BIGSERIAL PRIMARY KEY,
     short_code VARCHAR(7) UNIQUE NOT NULL,
     original_url TEXT NOT NULL,
+    max_clicks INT NULL, -- лимит переходов (вариант 9); NULL = без лимита
     created_at TIMESTAMP DEFAULT NOW(),
     expires_at TIMESTAMP
 );
@@ -129,7 +131,15 @@ docker compose logs tunnel
 curl -s -X POST http://localhost/api/v1/links -H "Content-Type: application/json" -d "{\"original_url\":\"https://example.com/some/long/path\"}"
 ```
 ```json
-{"short_code":"bLQxnZM","short_url":"http://localhost/bLQxnZM","original_url":"https://example.com/some/long/path","created_at":"2026-09-03 09:26:01"}
+{"short_code":"bLQxnZM","short_url":"http://localhost/bLQxnZM","original_url":"https://example.com/some/long/path","created_at":"2026-09-03 09:26:01","max_clicks":null,"clicks_left":null}
+```
+
+Создание ссылки **с лимитом переходов** (вариант 9) — необязательное поле `max_clicks` (1..1 000 000):
+```cmd
+curl -s -X POST http://localhost/api/v1/links -H "Content-Type: application/json" -d "{\"original_url\":\"https://example.com/some/long/path\",\"max_clicks\":10}"
+```
+```json
+{"short_code":"pQr7sT2","short_url":"http://localhost/pQr7sT2","original_url":"https://example.com/some/long/path","created_at":"2026-09-03 09:27:12","max_clicks":10,"clicks_left":10}
 ```
 
 **2. Переход по короткой ссылке** — `GET /{short_code}` → 302 + Location:
@@ -139,6 +149,15 @@ curl -s -i http://localhost/bLQxnZM
 ```
 HTTP/1.1 302 Found
 Location: https://example.com/some/long/path
+```
+
+**Лимит исчерпан (вариант 9)** — если ссылка создана с `max_clicks` и счётчик переходов его достиг, тот же запрос вернёт **410 Gone** («лимит исчерпан», браузеру — ретро-HTML-страница), а ссылка будет удалена; все последующие запросы — обычный 404:
+```cmd
+curl -s -i http://localhost/pQr7sT2
+```
+```text
+HTTP/1.1 410 Gone
+{"detail":"Лимит переходов исчерпан (10 из 10), ссылка удалена"}
 ```
 
 **3. Статистика переходов** — `GET /api/v1/links/{short_code}/stats` → 200:
@@ -214,10 +233,10 @@ url_shorter/
 
 ## Варианты заданий
 
-Распределение вариантов по участникам (данные функции в проекте не реализуются):
+Распределение вариантов по участникам:
 
-2. Сервис сокращения URL с генерацией QR-кодов — Бондаренко
-3. Временные короткие ссылки — Лукина
-5. Сервис сокращения URL с защитой паролем — Казаченко
-9. Сервис с ограничением количества переходов — Гаранин
-10. Сервис с монетизацией (реклама) — Кочетков
+2. Сервис сокращения URL с генерацией QR-кодов — Бондаренко (не реализуется)
+3. Временные короткие ссылки — Лукина (не реализуется)
+5. Сервис сокращения URL с защитой паролем — Казаченко (не реализуется)
+9. Сервис с ограничением количества переходов — Гаранин (**реализовано**: поле `max_clicks` при создании, 410 + удаление ссылки при исчерпании)
+10. Сервис с монетизацией (реклама) — Кочетков (не реализуется)

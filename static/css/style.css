@@ -330,6 +330,17 @@ body {
 .small-note { font-size: 11px; color: #4a6a80; margin-top: 6px; }
 .disclaimer { opacity: .6; font-style: italic; margin-top: 2px; }
 
+/* ---------- Лимит переходов (вариант 9) ---------- */
+.limit-note { color: var(--steel-dk); font-weight: bold; }
+
+/* спиннеры у number-инпорта прячем — ретро-эстетика */
+.input-frame input[type="number"]::-webkit-outer-spin-button,
+.input-frame input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.input-frame input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
 .sidebar .input-frame { margin-top: 6px; margin-bottom: 10px; }
 .sidebar .input-frame input { padding: 7px 10px; font-size: 13px; }
 

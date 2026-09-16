@@ -49,6 +49,27 @@
                         <p class="field-hint" id="url-hint">только http:// и https:// &middot; до 2048 символов</p>
                     </div>
 
+                    <div class="field-shell" id="limit-field">
+                        <label class="field-label" for="limit-input" id="limit-label">
+                            <span class="label-text">Лимит переходов&nbsp;:</span>
+                        </label>
+                        <div class="input-frame">
+                            <input
+                                type="number"
+                                id="limit-input"
+                                name="max_clicks"
+                                min="1"
+                                max="1000000"
+                                step="1"
+                                inputmode="numeric"
+                                spellcheck="false"
+                                aria-describedby="limit-hint"
+                                placeholder="&infin; &mdash; без лимита"
+                            >
+                        </div>
+                        <p class="field-hint" id="limit-hint">необязательно: после N-го перехода ссылка удалится</p>
+                    </div>
+
                     <button type="submit" class="btn btn-primary" id="shorten-btn">
                         <span class="btn-glyph">&#9986;</span> Сократить!
                     </button>
@@ -63,6 +84,7 @@
                     <div class="short-line">
                         <a id="short-link" class="short-link mono" href="#" target="_blank" rel="noopener" title="Открыть в новой вкладке"></a>
                     </div>
+                    <p class="small-note limit-note hidden" id="result-limit"></p>
                     <div class="result-actions">
                         <button type="button" class="btn" id="copy-btn">&#128203; Копировать</button>
                         <button type="button" class="btn" id="stats-btn">&#128202; Статистика</button>
@@ -166,6 +188,7 @@
             <div class="clicks-total">
                 Всего переходов: <span id="m-clicks" class="clicks-number mono">0</span>
             </div>
+            <p class="small-note limit-note hidden" id="m-limit"></p>
 
             <table class="stats-table" id="stats-table">
                 <thead>

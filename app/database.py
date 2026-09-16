@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS links (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     short_code   TEXT    NOT NULL UNIQUE,
     original_url TEXT    NOT NULL,
-    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    max_clicks   INTEGER                              -- лимит переходов (NULL = без лимита)
 );
 
 -- unique-ограничение уже создаёт индекс; явное имя оставлено для читаемости миграций
@@ -67,6 +68,20 @@ class Database:
     async def init_schema(self) -> None:
         """Создать таблицы/индексы, если их ещё нет (идемпотентно)."""
         await self._conn.executescript(SCHEMA_SQL)
+        await self._add_missing_columns()
+
+    async def _add_missing_columns(self) -> None:
+        """Мягкая миграция старых БД с docker-тома: колонка max_clicks.
+
+        CREATE TABLE IF NOT EXISTS не меняет уже существующую таблицу,
+        а файл SQLite переживает пересборку контейнера, поэтому нехватку
+        колонок добираем ALTER TABLE'ом при старте.
+        """
+        cursor = await self._conn.execute("PRAGMA table_info(links)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        await cursor.close()
+        if "max_clicks" not in columns:
+            await self._conn.execute("ALTER TABLE links ADD COLUMN max_clicks INTEGER")
 
     async def close(self) -> None:
         if self._conn is not None:
