@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>!!! ВЕРИФИКАЦИЯ ПАРОЛЯ !!!</title>
+  <style>
+    body {
+      background: repeating-conic-gradient(#000000 0% 25%, #111111 0% 50%) 0 0 / 24px 24px;
+      font-family: "Comic Sans MS", "Comic Sans", cursive, sans-serif;
+      color: #FFFFFF;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+      cursor: crosshair;
+    }
+    a:link { color: #FFFF00; }
+    h1 {
+      font-size: 2.2em;
+      color: #FF0000;
+      text-shadow: 2px 2px #FFFF00;
+      margin: 0.6em 0 0;
+      letter-spacing: 2px;
+    }
+    .blink { animation: blink 1s step-start infinite; color: #FFFF00; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .box {
+      border: 6px ridge #C0C0C0;
+      background: #008080;
+      max-width: 26rem;
+      margin: 2rem auto;
+      padding: 1.4rem;
+    }
+    .box h2 { color: #FFFFFF; text-shadow: 2px 2px #000000; margin-top: 0; }
+    form { display: grid; gap: 0.7rem; text-align: left; }
+    label { color: #00FFFF; font-weight: bold; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.45rem;
+      font-size: 1rem;
+      font-family: "Times New Roman", serif;
+      background: #E0FFFF;
+      color: #000000;
+      border: 3px inset #808080;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1.1em;
+      font-family: "Comic Sans MS", cursive;
+      background: #00FF00;
+      color: #000000;
+      border: 4px ridge #C0C0C0;
+      cursor: hand;
+    }
+    button:hover { background: #FF0000; color: #FFFF00; }
+    .error {
+      color: #FFFF00;
+      background: #FF0000;
+      border: 3px double #FFFF00;
+      padding: 0.5rem;
+      font-weight: bold;
+    }
+    .warn { color: #FF0000; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>=== <span class="blink">ACCESS DENIED</span> ===</h1>
+  <hr style="border:0;height:4px;background:repeating-linear-gradient(90deg,#FF0000,#FF0000 20px,#FFFF00 20px,#FFFF00 40px);">
+
+  <div class="box">
+    <h2>~ ВВЕДИ ПАРОЛЬ ~</h2>
+    <p>Эта ссылка защищена. <span class="warn">ДОСТУП ТОЛЬКО ДЛЯ СВОИХ!</span></p>
+
+    <% if (error) { %><div class="error">!!! НЕВЕРНЫЙ ПАРОЛЬ !!! <%= error %></div><% } %>
+
+    <form method="POST" action="/<%= code %>">
+      <label>ПАРОЛЬ:
+        <input name="password" type="password" required autofocus>
+      </label>
+      <button type="submit">OTKРЫТЬ ДОСТУП >;</button>
+    </form>
+    <p style="font-size:0.8em;color:#00FF00;">Подсказка: пароль знает только владелец ссылки!</p>
+  </div>
+
+  <marquee scrollamount="6">*** НЕ ПОДГЛЯДЫВАЙ ЧЕРЕЗ ПЛЕЧО! ***</marquee>
+  <p class="warn" style="margin-top:1rem;"><a href="/">&lt;&lt; НАЗАД НА ГЛАВНУЮ</a></p>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>*** КОРОТКИЕ ССЫЛКИ *** ДОБРО ПОЖАЛОВАТЬ! ***</title>
+  <style>
+    body {
+      background: repeating-conic-gradient(#000080 0% 25%, #0000A0 0% 50%) 0 0 / 24px 24px;
+      font-family: "Comic Sans MS", "Comic Sans", cursive, sans-serif;
+      color: #FFFFFF;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+      cursor: crosshair;
+    }
+    a:link { color: #FFFF00; }
+    a:visited { color: #FF00FF; }
+    a:hover { color: #00FFFF; }
+    h1 {
+      font-size: 2.6em;
+      color: #FFFF00;
+      text-shadow: 3px 3px #FF0000;
+      margin: 0.5em 0 0;
+      letter-spacing: 2px;
+    }
+    .blink { animation: blink 1s step-start infinite; color: #FF00FF; }
+    @keyframes blink { 50% { opacity: 0; } }
+    marquee {
+      background: #FF0000;
+      color: #FFFF00;
+      font-weight: bold;
+      font-size: 1.1em;
+      padding: 4px 0;
+      border-top: 2px solid #FFFF00;
+      border-bottom: 2px solid #FFFF00;
+    }
+    .box {
+      border: 6px ridge #C0C0C0;
+      background: #008080;
+      max-width: 34rem;
+      margin: 1.5rem auto;
+      padding: 1.2rem;
+    }
+    .box h2 {
+      color: #FFFFFF;
+      text-shadow: 2px 2px #000000;
+      margin-top: 0;
+    }
+    form { display: grid; gap: 0.7rem; text-align: left; }
+    label { color: #00FFFF; font-weight: bold; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.45rem;
+      font-size: 1rem;
+      font-family: "Times New Roman", serif;
+      background: #E0FFFF;
+      color: #000000;
+      border: 3px inset #808080;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1.1em;
+      font-family: "Comic Sans MS", cursive;
+      background: #FF0000;
+      color: #FFFF00;
+      border: 4px ridge #C0C0C0;
+      cursor: hand;
+    }
+    button:hover { background: #FF8000; }
+    .error {
+      color: #FFFF00;
+      background: #FF0000;
+      border: 3px double #FFFF00;
+      padding: 0.5rem;
+      font-weight: bold;
+    }
+    .result {
+      color: #00FF00;
+      background: #000000;
+      border: 3px double #00FF00;
+      padding: 0.5rem;
+      font-weight: bold;
+    }
+    .visitor {
+      color: #00FF00;
+      font-family: "Courier New", monospace;
+      font-size: 1.3em;
+      background: #000000;
+      border: 3px inset #808080;
+      display: inline-block;
+      padding: 0.3rem 0.8rem;
+      margin: 0.8rem 0;
+    }
+    .visitor span { color: #FF0000; }
+    .footer {
+      color: #C0C0C0;
+      font-size: 0.8em;
+      font-family: "Times New Roman", serif;
+      margin: 1rem 0;
+    }
+    hr.hr { border: 0; height: 4px; background: repeating-linear-gradient(90deg, #FF0000, #FF0000 20px, #00FF00 20px, #00FF00 40px); }
+  </style>
+</head>
+<body>
+  <hr class="hr">
+  <h1>*** <span class="blink">КОРОТКИЕ ССЫЛКИ</span> ***</h1>
+  <p>ЛУЧШИЙ СЕРВИС СОКРАЩЕНИЯ URL В ИНТЕРНЕТЕ!</p>
+  <hr class="hr">
+  <marquee scrollamount="6">*** ВНИМАНИЕ! БЫСТРЕЙ АЛЬТЕРНАТИВЫ BITLY НЕТ!!! ТЕПЕРЬ С ЗАЩИТОЙ ПАРОЛЕМ ***</marquee>
+
+  <div class="box">
+    <h2>~ СОЗДАТЬ СВОЮ ССЫЛКУ ~</h2>
+    <p>Вставь длинный URL. Захотел секретности — придумай пароль.</p>
+
+    <% if (error) { %><div class="error">!!! <%= error %> !!!</div><% } %>
+    <% if (result) { %>
+      <div class="result">ГОТОВО! ★ <a href="<%= result %>"><%= result %></a> ★</div>
+    <% } %>
+
+    <form method="POST" action="/">
+      <label>ДЛИННЫЙ URL:
+        <input name="url" type="url" placeholder="https://example.com/very/long/path" required>
+      </label>
+      <label>ПАРОЛЬ (НЕ ОБЯЗАТЕЛЬНО):
+        <input name="password" type="password" placeholder="Оставь пустым, если пароль не нужен">
+      </label>
+      <label>СВОЙ КОРОТКИЙ КОД (НЕ ОБЯЗАТЕЛЬНО):
+        <input name="code" placeholder="aB3xK9">
+      </label>
+      <button type="submit">СОЗДАТЬ ССЫЛКУ! >>;</button>
+    </form>
+  </div>
+
+  <div class="visitor">
+    CountVisits: <span>0042037</span><br>
+    Осталось ссылок: <span>∫∞</span>
+  </div>
+
+  <p class="footer">© 1996-2026 Компания "Ссылки &amp; К". Лучший браузер — Netscape Navigator 3.0.<br>
+  Тебе нравится наш сайт? <a href="mailto:webmaster@example.com">Напиши нам!</a> ★ <a href="https://validator.w3.org/">W3C VALID</a></p>
+</body>
+</html>
