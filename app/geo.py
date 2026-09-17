@@ -1,11 +1,6 @@
-"""Геолокация IP-адреса: приватный -> 'local', публичный -> ip-api.com + кэш.
+"""Геолокация IP: приватный -> 'local', публичный -> ip-api.com + кэш 24 ч.
 
-Fallback-цепочка (docs/ARCHITECTURE.md, раздел 6):
-    geo:{ip} в Redis  ->  http://ip-api.com/json/{ip}?fields=status,countryCode  ->  'unknown'
-
-- таймаут внешнего запроса GEO_TIMEOUT_SECONDS (2 с);
-- результат кэшируется в Redis на 24 ч (лимит ip-api.com — 45 запросов/мин);
-- при любом сбое страна 'unknown': переход фиксируется всегда, кэш не отравляем.
+Fallback: Redis geo:{ip} -> ip-api.com -> 'unknown'. Сбой не роняет переход.
 """
 
 import ipaddress
@@ -18,13 +13,8 @@ from app.config import settings
 
 def extract_client_ip(forwarded_for: str | None, real_ip: str | None,
                       direct_ip: str | None) -> str:
-    """IP клиента: первый адрес из X-Forwarded-For, затем X-Real-IP, затем socket.
-
-    За nginx заголовок X-Forwarded-For перезаписывается ($proxy_add_x_forwarded_for),
-    так что первый элемент — реальный адрес клиента.
-    """
+    """Первый адрес из X-Forwarded-For, затем X-Real-IP, затем socket."""
     if forwarded_for:
-        # "203.0.113.7, 10.0.0.1, ..." -> первый адрес
         first = forwarded_for.split(",")[0].strip()
         if first:
             return first
@@ -34,11 +24,6 @@ def extract_client_ip(forwarded_for: str | None, real_ip: str | None,
 
 
 def is_private_ip(ip: str) -> bool:
-    """Приватные/loopback/link-local/ULA-адреса не геолокируем вовсе.
-
-    Покрывает 10/8, 172.16/12, 192.168/16, 127.*, ::1, fc00::/7 и пр.
-    Битые строки трактуем как приватные — внешний вызов не делаем.
-    """
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -66,10 +51,8 @@ async def resolve_country(ip: str) -> str:
     except (httpx.HTTPError, ValueError):
         pass
 
-    # Сбой/таймаут/лимит: страна уточнится при следующих переходах с этого IP
     return "unknown"
 
 
-# Проверка шаблона GEO_API_URL при импорте — ранний фейл при кривой конфигурации
 if "{ip}" not in settings.geo_api_url:
     raise RuntimeError("GEO_API_URL должен содержать плейсхолдер {ip}")
