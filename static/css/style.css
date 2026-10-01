@@ -302,6 +302,38 @@ body {
 
 .result-actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---------- QR-код (результат + модалка, тот же bevel/retro) ---------- */
+.qr-box {
+    margin-top: 12px;
+    padding: 10px;
+    text-align: center;
+    background: #f4f8fc;
+    border: 2px solid;
+    border-color: #ffffff var(--steel-dk) var(--steel-dk) #ffffff;
+}
+
+.qr-block {
+    margin-bottom: 12px;
+    padding: 10px;
+    text-align: center;
+    background: #f4f8fc;
+    border: 2px solid;
+    border-color: #ffffff var(--steel-dk) var(--steel-dk) #ffffff;
+}
+
+.qr-caption { font-weight: bold; color: var(--steel-dk); margin-bottom: 8px; }
+
+.qr-img {
+    display: inline-block;
+    background: #ffffff;
+    border: 1px solid var(--steel);
+    image-rendering: pixelated;
+}
+
+.qr-actions { margin-top: 8px; }
+
+.qr-download { text-decoration: none; font-size: 12px; padding: 5px 12px; }
+
 .hidden { display: none !important; }
 
 /* ---------- Сайдбар ---------- */
