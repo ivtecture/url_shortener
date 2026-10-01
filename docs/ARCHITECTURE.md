@@ -60,7 +60,7 @@ url_shorter/
 │   ├── database.py            # подключение aiosqlite, PRAGMA (WAL, busy_timeout, FK)
 │   ├── models.py              # pydantic-схемы запросов/ответов
 │   ├── links.py               # роутер: POST /api/v1/links, GET /{short_code},
-│   │                          #         GET /stats, DELETE /delete/{short_code}
+│   │                          #         GET /stats, GET /qr, DELETE /delete/{short_code}
 │   ├── shortcuts.py           # генерация short_code (base62, коллизии)
 │   ├── geo.py                 # геолокация IP: ip-api.com + кэш Redis + fallback
 │   └── cache.py               # обёртка над redis.asyncio
@@ -218,7 +218,40 @@ ORDER BY cnt DESC;
 
 **Ошибки:** `404` — код не найден (`{"detail": "Ссылка не найдена"}`).
 
-### 4.4. DELETE /api/v1/links/delete/{short_code} — удалить ссылку
+### 4.4. GET /api/v1/links/{short_code}/qr — QR-код ссылки (PNG)
+
+Кодирует полный `short_url` (`BASE_URL/{code}`, как в `create`) в PNG через `qrcode` + `Pillow`
+(`box_size=10`, `border=4`). Рендер CPU-bound, поэтому выполняется в threadpool
+через `asyncio.to_thread(_render_qr_png, ...)` и не блокирует event loop.
+
+**Успех — 200 OK** (`Content-Type: image/png`, `Cache-Control: public, max-age=3600`):
+
+```
+HTTP/1.1 200 OK
+Content-Type: image/png
+Cache-Control: public, max-age=3600
+<бинарный PNG>
+```
+
+Проверки: невалидный формат кода → `404` без БД/кэша; существование — сначала
+Redis `url:{code}`, затем `SELECT 1 FROM links`; нет → `404 {"detail": "Ссылка не найдена"}`.
+
+Кэширование: QR в Redis не храним (генерация дешёвая — миллисекунды, код
+иммутабелен пока жив); HTTP-кэш покрывает повторные запросы. После `DELETE`
+код исчезает из БД/кэша → endpoint автоматически отдаёт `404`, отдельная
+инвалидация не нужна.
+
+Фронтенд: `static/js/app.js` (`qrUrlFor()` + `encodeURIComponent`, вставка через
+`src`/`href`/`download` без `innerHTML`), `<img>` в блоке результата и в модалке
+статистики + кнопка «скачать PNG».
+
+**Ошибки:**
+
+| Код | Случай | Тело |
+|-----|--------|------|
+| 404 | код не найден, неверный формат или ссылка удалена | `{"detail": "Ссылка не найдена"}` |
+
+### 4.5. DELETE /api/v1/links/delete/{short_code} — удалить ссылку
 
 Физическое удаление строки из `links` (аналитика уходит каскадом). Кэш `url:{short_code}` инвалидируется (`DEL`) сразу после удаления.
 
@@ -236,7 +269,7 @@ ORDER BY cnt DESC;
 
 Сервис анонимный → владение не проверяется: удалить может любой, кто знает `short_code` (компромисс, см. раздел 9).
 
-### 4.5. GET /api/v1/health — служебный
+### 4.6. GET /api/v1/health — служебный
 
 `200 {"status": "ok"}` — используется healthcheck'ами Docker и nginx (`location /api/v1/health`). В ответе также флаги `db: true/false`, `redis: true/false` по факту доступности зависимостей.
 
@@ -425,7 +458,7 @@ server {
 ### 8.1. Главная страница (`static/index.html`)
 
 - **Форма**: поле «Вставьте длинный URL» + кнопка «Сократить!».
-- **Результат**: короткий URL, кнопка «Копировать» (Clipboard API), кнопка «Статистика» (открывает модалку), кнопка «Удалить».
+- **Результат**: короткий URL, кнопка «Копировать» (Clipboard API), кнопка «Статистика» (открывает модалку), кнопка «Удалить», кнопка «QR» (показывает PNG с `/api/v1/links/{code}/qr` + ссылка «скачать»).
 - **Мем про программирование**: картинка/подпись в духе классики 2000-х — например, «It works on my machine» с печатающимся эффектом; размещается в «сайдбаре»-таблице как визитка эпохи.
 - **Стиль 2000-х, приглушённые холодные тона**: палитра `#2f4f4f` (dark slate), `#4682b4` (steel blue), `#b0c4de` (light steel), фон с лёгким градиентом; bevel-рамки у кнопок (border outset/inset), моноширинный системный шрифт для кодов, «стеклянные» полосатые заголовки таблиц как у старых форумов.
 - **Выразительная анимация полей ввода**: при фокусе — рамка «загорается» холодным свечением (box-shadow + transition), мигающий caret-стилизация, плавное «всплытие» label'а над полем, placeholder «печатается» посимвольно.
@@ -433,7 +466,7 @@ server {
 ### 8.2. Модалка статистики
 
 - Открывается кнопкой «Статистика» у созданной ссылки (и по введённому коду).
-- Содержимое: короткий URL, исходный URL, дата создания, крупный счётчик переходов, таблица «Страна — Переходов» (сортировка по убыванию), кнопка «Обновить» (повторный fetch).
+- Содержимое: короткий URL, исходный URL, дата создания, крупный счётчик переходов, таблица «Страна — Переходов» (сортировка по убыванию), кнопка «Обновить» (повторный fetch), QR-код ссылки (`GET /api/v1/links/{code}/qr`) + кнопка «скачать PNG».
 - Закрытие: крестик, клик по фону, Esc.
 
 ### 8.3. JS-код вызова API (`static/js/app.js`)
@@ -458,6 +491,11 @@ if (res.status === 201) {
 // 2. Статистика (в модалке)
 const stats = await fetch(`/api/v1/links/${shortCode}/stats`);
 if (stats.ok) renderStats(await stats.json());   // { clicks, countries: [...] }
+
+// 2b. QR-код (PNG): encodeURIComponent + DOM-свойства, без innerHTML (XSS-безопасно)
+const qrUrl = `/api/v1/links/${encodeURIComponent(shortCode)}/qr`;
+qrImg.src = qrUrl;
+qrDownload.href = qrUrl;
 
 // 3. Удаление
 const del = await fetch(`/api/v1/links/delete/${shortCode}`, { method: 'DELETE' });

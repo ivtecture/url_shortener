@@ -34,6 +34,7 @@
 | `/api/v1/links`                   | POST  | Создать короткую ссылку      |
 | `/{short_code}`                   | GET   | Редирект на оригинальный URL |
 | `/api/v1/links/{short_code}/stats`| GET   | Получить статистику          |
+| `/api/v1/links/{short_code}/qr`   | GET   | QR-код ссылки (PNG, `image/png`, `Cache-Control: public, max-age=3600`) |
 | `/api/v1/links/delete/{short_code}` | DELETE | Удалить ссылку             |
 
 ## Схема базы данных (примерная, адаптируй, упрости, дополни под sqlite)
@@ -149,7 +150,17 @@ curl -s http://localhost/api/v1/links/bLQxnZM/stats
 {"short_code":"bLQxnZM","original_url":"https://example.com/some/long/path","created_at":"2026-09-03 09:26:01","clicks":3,"countries":[{"country":"local","count":3}]}
 ```
 
-**4. Удалить ссылку** — `DELETE /api/v1/links/delete/{short_code}` → 200, повторный GET → 404:
+**4. QR-код ссылки** — `GET /api/v1/links/{short_code}/qr` → 200 `image/png`:
+```cmd
+curl -s -o qr.png -w "%{http_code} %{content_type}\n" http://localhost/api/v1/links/bLQxnZM/qr
+```
+```
+200 image/png
+```
+Ответ — PNG с QR-кодом полного `short_url` (`Cache-Control: public, max-age=3600`).
+Несуществующий код → 404 `{"detail":"Ссылка не найдена"}`; после `DELETE` QR той же ссылки тоже отдаёт 404 без отдельной инвалидации.
+
+**5. Удалить ссылку** — `DELETE /api/v1/links/delete/{short_code}` → 200, повторный GET → 404:
 ```cmd
 curl -s -i -X DELETE http://localhost/api/v1/links/delete/bLQxnZM
 curl -s -o nul -w "%{http_code}" http://localhost/bLQxnZM
@@ -168,7 +179,7 @@ curl -s -i -X POST http://localhost/api/v1/links -H "Content-Type: application/j
 | Сервис | Образ | Порт | Назначение |
 |---|---|---|---|
 | nginx | nginx:1.27-alpine | **:80** (единственный вход снаружи) | reverse proxy, раздача статики `static/` |
-| app | python:3.12-alpine | :8000 (только внутренняя сеть) | FastAPI: создание/редирект/статистика/удаление |
+| app | python:3.12-alpine | :8000 (только внутренняя сеть) | FastAPI: создание/редирект/статистика/QR/удаление |
 | redis | redis:7-alpine | :6379 (только внутренняя сеть) | кэш редиректов и гео-данных (AOF, LRU 128 MB) |
 | — | — | том `sqlite-data` | база SQLite `/data/urlshortener.db` |
 
@@ -176,7 +187,7 @@ curl -s -i -X POST http://localhost/api/v1/links -H "Content-Type: application/j
 url_shorter/
 ├── app/                     # FastAPI-приложение
 │   ├── main.py              # точка входа, lifespan, /api/v1/health
-│   ├── links.py             # роутер: create / redirect / stats / delete
+│   ├── links.py             # роутер: create / redirect / stats / qr / delete
 │   ├── models.py            # pydantic-схемы запросов и ответов
 │   ├── database.py          # обёртка над SQLite (aiosqlite)
 │   ├── cache.py             # Redis-кэш (redis-py)

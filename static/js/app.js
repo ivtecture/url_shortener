@@ -177,7 +177,8 @@ form.addEventListener("submit", async (event) => {
             shortLink.href = data.short_url;
             resultBox.classList.remove("hidden");
             urlInput.select();
-        } else {            const err = await res.json().catch(() => ({}));
+        } else {
+            const err = await res.json().catch(() => ({}));
             showError(errorBox, extractErrorMessage(err.detail, "Ошибка " + res.status));
         }
     } catch (networkError) {

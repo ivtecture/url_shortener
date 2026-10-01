@@ -6,6 +6,7 @@
 `/openapi.json` добавляются ещё в конструкторе приложения — конфликтов нет.
 """
 
+import asyncio
 import io
 import sqlite3
 from urllib.parse import urlparse
@@ -216,6 +217,21 @@ async def get_stats(short_code: str) -> StatsResponse:
 
 
 # ---------------------------------------------- GET /api/v1/links/{short_code}/qr
+def _render_qr_png(short_url: str) -> bytes:
+    """Синхронный рендер QR PNG (CPU + PIL).
+
+    Вынесено отдельно, чтобы async-хендлер вызывал через
+    ``asyncio.to_thread`` и не блокировал event loop (review fix).
+    """
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(short_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @router.get(
     "/api/v1/links/{short_code}/qr",
     summary="QR-код короткой ссылки (PNG)",
@@ -234,6 +250,8 @@ async def get_qr(short_code: str) -> Response:
       HTTP-кэш `Cache-Control: public, max-age=3600` достаточен.
       После DELETE код исчезает из БД/кэша -> здесь автоматически 404,
       отдельная инвалидация QR не нужна.
+    - Тяжёлый рендер PIL выполняется в threadpool через ``asyncio.to_thread``,
+      чтобы не блокировать event loop для соседних запросов.
     - Логику create/redirect/stats/delete/health не меняем.
     """
     if not is_valid_short_code(short_code):
@@ -256,14 +274,10 @@ async def get_qr(short_code: str) -> Response:
         found = True
 
     short_url = build_short_url(short_code)
-    qr = qrcode.QRCode(box_size=10, border=4)
-    qr.add_data(short_url)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    # CPU-bound PIL-рендер — в threadpool, не блокируем event loop.
+    png = await asyncio.to_thread(_render_qr_png, short_url)
     return Response(
-        content=buf.getvalue(),
+        content=png,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
     )
