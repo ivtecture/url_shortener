@@ -3,52 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ShortURL — простой сокращатель ссылок.">
-    <title>ShortURL</title>
+    <meta name="description" content="ShortURL 2000 — анонимный сокращатель ссылок с аналитикой и рекламой. Стиль 2000-х, холодные тона.">
+    <title>ShortURL 2000 :: сокращатель ссылок</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 <div class="page">
 
-    <header class="header">
-        <span class="brand">Short<span class="brand-accent">URL</span></span>
+    <!-- ======================= ШАПКА ======================= -->
+    <header class="panel header-panel">
+        <div class="panel-caption">
+            <span class="caption-title">&#9889; ShortURL 2000 &mdash; [окно программы]</span>
+            <span class="caption-btns" aria-hidden="true">
+                <span class="cap-btn">_</span><span class="cap-btn">&#9633;</span><span class="cap-btn cap-close">&times;</span>
+            </span>
+        </div>
+        <div class="panel-body header-body">
+            <h1 class="site-title">Short<span class="accent">URL</span> 2000<span class="caret" aria-hidden="true">_</span></h1>
+            <p class="site-tagline">:: лучший сокращатель ссылок в рунете :: анонимно :: бесплатно :: без SMS ::</p>
+        </div>
     </header>
 
-    <main class="hero">
-        <h1 class="hero-title">Короткая ссылка за секунду</h1>
-        <p class="hero-sub">Вставьте длинный URL и получите короткий.</p>
+    <main class="layout">
 
-        <div class="card">
-            <form id="shorten-form" autocomplete="off" novalidate>
-                <div class="field">
-                    <input
-                        type="text"
-                        id="url-input"
-                        name="original_url"
-                        placeholder="https://example.com/very/long/url"
-                        spellcheck="false"
-                        aria-label="Длинный URL"
-                    >
-                    <button type="submit" class="btn" id="shorten-btn">Сократить</button>
+        <!-- ======================= ЛЕВАЯ КОЛОНКА: ФОРМА ======================= -->
+        <section class="panel main-panel" aria-label="Форма сокращения ссылки">
+            <div class="panel-caption"><span class="caption-title">&#128279; Сократить ссылку</span></div>
+            <div class="panel-body">
+
+                <form id="shorten-form" autocomplete="off" novalidate>
+                    <div class="field-shell" id="url-field">
+                        <label class="field-label" for="url-input">
+                            <span class="label-text">Вставьте длинный URL&nbsp;:</span>
+                        </label>
+                        <div class="input-frame">
+                            <input
+                                type="text"
+                                id="url-input"
+                                name="original_url"
+                                spellcheck="false"
+                                aria-describedby="url-hint"
+                            >
+                            <span class="fake-caret" id="fake-caret" aria-hidden="true">&#9614;</span>
+                        </div>
+                        <p class="field-hint" id="url-hint">только http:// и https:// &middot; до 2048 символов</p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="shorten-btn">
+                        <span class="btn-glyph" aria-hidden="true">&#9986;</span> Сократить!
+                    </button>
+                </form>
+
+                <div id="error-box" class="msg error-box hidden" role="alert"></div>
+
+                <div id="result" class="result-box hidden" aria-live="polite">
+                    <div class="result-caption">&#128077; Ваша ссылка готова!</div>
+                    <div class="short-line">
+                        <a id="short-link" class="short-link mono" href="#" target="_blank" rel="noopener" title="Открыть в новой вкладке"></a>
+                    </div>
+                    <div class="result-actions">
+                        <button type="button" class="btn" id="copy-btn">&#128203; Копировать</button>
+                        <button type="button" class="btn" id="stats-btn">&#128202; Статистика</button>
+                        <button type="button" class="btn btn-danger" id="delete-btn">&#10060; Удалить</button>
+                    </div>
+                    <p class="result-note">При переходе по ссылке показывается реклама &mdash; так сервис зарабатывает.</p>
                 </div>
-                <p class="hint">только http:// и https://</p>
-            </form>
 
-            <div id="error-box" class="error hidden" role="alert"></div>
-
-            <div id="result" class="result hidden" aria-live="polite">
-                <div class="result-line">
-                    <a id="short-link" class="short-link" href="#" target="_blank" rel="noopener"></a>
-                    <button type="button" class="btn btn-ghost" id="copy-btn">Копировать</button>
-                </div>
             </div>
-        </div>
+        </section>
+
+        <!-- ======================= ПРАВАЯ КОЛОНКА: САЙДБАР ======================= -->
+        <aside class="sidebar">
+
+            <!-- Байка №1 -->
+            <section class="panel" aria-label="Байка про программирование">
+                <div class="panel-caption"><span class="caption-title">&#128512; Байка №1</span></div>
+                <div class="panel-body meme-body">
+<pre class="ascii-meme" aria-label="Мем: работает на моей машине">
+ +--------------------------+
+ |   WORKS ON MY MACHINE    |
+ |         (c) 2004         |
+ +--------------------------+
+      \   ^__^
+       \  (oo)\_______
+          (__)\       )/\
+              ||----w |
+              ||     ||
+</pre>
+                    <p class="meme-note">&mdash; У меня всё работает!<br>&mdash; А у клиента &mdash; нет.<br>&mdash; Значит, клиент не машина. &copy; народная мудрость CI/CD</p>
+                </div>
+            </section>
+
+            <!-- Байка №2 -->
+            <section class="panel" aria-label="Байка про батоны">
+                <div class="panel-caption"><span class="caption-title">&#127839; Байка №2</span></div>
+                <div class="panel-body meme-body">
+                    <p>Жена отправляет программиста в магазин:</p>
+                    <p class="mono quote">&mdash; Купи батон хлеба. Если будут яйца &mdash; возьми десяток.</p>
+                    <p>Программист возвращается с десятью батонами:</p>
+                    <p class="mono quote">&mdash; Яйца были.</p>
+                </div>
+            </section>
+
+            <!-- Статистика по чужому коду -->
+            <section class="panel" aria-label="Статистика по коду">
+                <div class="panel-caption"><span class="caption-title">&#128269; Чужая статистика</span></div>
+                <div class="panel-body">
+                    <p class="small-note">Знаете код ссылки? Введите 7 символов:</p>
+                    <div class="input-frame compact">
+                        <input
+                            type="text"
+                            id="stats-code-input"
+                            class="mono"
+                            maxlength="7"
+                            spellcheck="false"
+                            placeholder="aB3xK9z"
+                            aria-label="Код короткой ссылки для статистики"
+                        >
+                    </div>
+                    <button type="button" class="btn btn-wide" id="stats-code-btn">Показать статистику</button>
+                </div>
+            </section>
+
+        </aside>
     </main>
 
     <footer class="footer">
-        <span>&copy; 2026 ShortURL</span>
+        <span>&copy; 2026 ShortURL 2000 &mdash; анонимно, без регистрации, без cookies</span>
     </footer>
 
+</div>
+
+<!-- ======================= МОДАЛКА СТАТИСТИКИ ======================= -->
+<div class="modal-backdrop hidden" id="stats-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="panel modal-panel">
+        <div class="panel-caption">
+            <span class="caption-title" id="modal-title">&#128202; Статистика переходов</span>
+            <button type="button" class="cap-btn cap-close modal-x" id="modal-close-x" aria-label="Закрыть">&times;</button>
+        </div>
+        <div class="panel-body">
+
+            <div id="modal-error" class="msg error-box hidden" role="alert"></div>
+
+            <dl class="meta-list">
+                <div class="meta-row">
+                    <dt>Короткая ссылка</dt>
+                    <dd class="mono" id="modal-code-label">&mdash;</dd>
+                </div>
+                <div class="meta-row">
+                    <dt>Создана</dt>
+                    <dd class="mono" id="modal-created">&mdash;</dd>
+                </div>
+                <div class="meta-row meta-row-wide">
+                    <dt>Исходный URL</dt>
+                    <dd class="mono break" id="modal-original">&mdash;</dd>
+                </div>
+            </dl>
+
+            <div class="counter-block">
+                <span class="counter-label">Всего переходов:</span>
+                <strong class="counter-value" id="modal-clicks">0</strong>
+            </div>
+
+            <h3 class="sub-title">Страна &mdash; переходы</h3>
+            <div class="table-frame">
+                <table class="data-table">
+                    <thead>
+                        <tr><th scope="col">Страна</th><th scope="col">Переходов</th></tr>
+                    </thead>
+                    <tbody id="modal-countries">
+                        <tr><td colspan="2" class="empty-cell">нет данных</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 class="sub-title">Реклама на этой ссылке</h3>
+            <div class="table-frame">
+                <table class="data-table">
+                    <thead>
+                        <tr><th scope="col">Показы</th><th scope="col">Клики</th><th scope="col">CTR</th></tr>
+                    </thead>
+                    <tbody id="modal-ads">
+                        <tr><td colspan="3" class="empty-cell">нет данных</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn" id="modal-refresh-btn">&#8635; Обновить</button>
+                <button type="button" class="btn btn-primary" id="modal-close-btn">Закрыть</button>
+            </div>
+
+        </div>
+    </div>
 </div>
 
 <script src="/js/app.js"></script>

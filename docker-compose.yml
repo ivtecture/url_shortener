@@ -43,8 +43,9 @@ services:
       GEO_CACHE_TTL_SECONDS: "86400"
       GEO_TIMEOUT_SECONDS: "2"
       BASE_URL: http://localhost                 # база для short_url в ответах API
-      AD_IMAGES_FILE: /static/ads/ad_images.txt # пул баннеров из static/ads/ (по строке на файл)
+      AD_IMAGES_FILE: /static/ads/ad_images.txt # пул баннеров из static/ads/ (image|link|weight)
       AD_TEXTS_FILE: /static/ads/ad_texts.txt    # подписи под баннером (по строке на файл)
+      AD_FLUSH_INTERVAL_SECONDS: "5"             # как часто буфер метрик рекламы пишется в SQLite
       ROUTING_PAGE_FILE: /templates/routing_page.html  # страница перехода (live-редактирование)
     volumes:
       - sqlite-data:/data

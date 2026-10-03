@@ -25,6 +25,18 @@ var schemaStatements = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_analytics_link_id ON analytics(link_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_analytics_link_clicked ON analytics(link_id, clicked_at)`,
+	// Накопленные счётчики рекламы. link_id = 0 — сквозной итог по баннеру,
+	// link_id > 0 — статистика конкретной ссылки. Пишем пачками из буфера
+	// в памяти, поэтому таблица остаётся компактной в отличие от event-log.
+	`CREATE TABLE IF NOT EXISTS ad_stats (
+		ad_key     TEXT    NOT NULL,
+		event_type TEXT    NOT NULL,
+		link_id    INTEGER NOT NULL,
+		count      INTEGER NOT NULL DEFAULT 0,
+		updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (ad_key, event_type, link_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ad_stats_link ON ad_stats(link_id)`,
 }
 
 type Database struct {

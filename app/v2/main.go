@@ -5,8 +5,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -24,6 +26,7 @@ type Config struct {
 	AdTexts            []string
 	AdTextsFile        string
 	RoutingPageFile    string
+	AdFlushInterval    int
 }
 
 func getEnv(key, fallback string) string {
@@ -67,34 +70,50 @@ func loadConfig() Config {
 		AdTexts:            splitCSV(getEnv("AD_TEXTS", "")),
 		AdTextsFile:        getEnv("AD_TEXTS_FILE", "/static/ads/ad_texts.txt"),
 		RoutingPageFile:    getEnv("ROUTING_PAGE_FILE", "/templates/routing_page.html"),
+		AdFlushInterval:    getEnvInt("AD_FLUSH_INTERVAL_SECONDS", 5),
 	}
 }
 
+// adEntry — баннер из static/ads/ad_images.txt.
+// Формат строки: image|link|weight, где weight — относительная частота
+// показа (по умолчанию 1). Key = имя файла, оно же идентификатор в метриках.
 type adEntry struct {
-	Image string
-	Link  string
+	Image  string
+	Link   string
+	Key    string
+	Weight int
 }
 
 func parseAdLine(line string) adEntry {
-	image, link, _ := strings.Cut(line, "|")
-	return adEntry{Image: strings.TrimSpace(image), Link: strings.TrimSpace(link)}
+	fields := strings.SplitN(line, "|", 3)
+	image := strings.TrimSpace(fields[0])
+	entry := adEntry{Image: image, Key: image, Weight: 1}
+	if len(fields) > 1 {
+		entry.Link = strings.TrimSpace(fields[1])
+	}
+	if len(fields) > 2 {
+		entry.Weight = parseAdWeight(fields[2])
+	}
+	return entry
+}
+
+// fallbackAdEntries строит список из ADS_FILES, когда файла с баннерами нет.
+func fallbackAdEntries(files []string) []adEntry {
+	out := make([]adEntry, 0, len(files))
+	for _, f := range files {
+		name := strings.TrimSpace(f)
+		out = append(out, adEntry{Image: name, Key: name, Weight: 1})
+	}
+	return out
 }
 
 func loadAdEntries(cfg Config) []adEntry {
 	if cfg.AdImagesFile == "" {
-		var out []adEntry
-		for _, f := range cfg.AdsFiles {
-			out = append(out, adEntry{Image: f})
-		}
-		return out
+		return fallbackAdEntries(cfg.AdsFiles)
 	}
 	data, err := os.ReadFile(cfg.AdImagesFile)
 	if err != nil {
-		var out []adEntry
-		for _, f := range cfg.AdsFiles {
-			out = append(out, adEntry{Image: f})
-		}
-		return out
+		return fallbackAdEntries(cfg.AdsFiles)
 	}
 	var out []adEntry
 	for _, line := range strings.Split(string(data), "\n") {
@@ -107,11 +126,7 @@ func loadAdEntries(cfg Config) []adEntry {
 	if len(out) > 0 {
 		return out
 	}
-	var fallback []adEntry
-	for _, f := range cfg.AdsFiles {
-		fallback = append(fallback, adEntry{Image: f})
-	}
-	return fallback
+	return fallbackAdEntries(cfg.AdsFiles)
 }
 
 func loadAdTexts(cfg Config) []string {
@@ -162,11 +177,42 @@ func main() {
 		log.Fatalf("geo: %v", err)
 	}
 
-	server := &Server{cfg: cfg, db: db, cache: cache, geo: geo}
+	adStats := NewAdStatsRecorder(db, time.Duration(cfg.AdFlushInterval)*time.Second)
+
+	server := &Server{cfg: cfg, db: db, cache: cache, geo: geo, adStats: adStats}
+
+	// Отмена контекста останавливает flush-цикл и заставляет его дописать
+	// несохранённые счётчики рекламы перед выходом.
+	runCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	go adStats.Run(runCtx)
 
 	addr := ":" + cfg.Port
-	log.Printf("url-shortener listening on %s", addr)
-	if err := http.ListenAndServe(addr, server.routes()); err != nil {
-		log.Fatal(err)
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           server.routes(),
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("url-shortener listening on %s", addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		log.Fatalf("http server: %v", err)
+	case <-runCtx.Done():
+		log.Print("shutdown signal received")
+	}
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("http shutdown: %v", err)
+	}
+	stop()
 }

@@ -35,17 +35,24 @@ type routingPageData struct {
 }
 
 type Server struct {
-	cfg   Config
-	db    *Database
-	cache *Cache
-	geo   *GeoResolver
+	cfg     Config
+	db      *Database
+	cache   *Cache
+	geo     *GeoResolver
+	adStats *AdStatsRecorder
 }
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v2/links", s.createLink)
 	mux.HandleFunc("GET /{short_code}", s.redirect)
+	// Обработчик клика по баннеру: считывает событие click и делает 302
+	// на рекламодателя. Само событие раньше терялось, т.к. шаблон ссылался
+	// на сайт рекламодателя напрямую.
+	mux.HandleFunc("GET /ad-click/{ad_key}", s.adClick)
 	mux.HandleFunc("GET /api/v2/links/{short_code}/stats", s.getStats)
+	mux.HandleFunc("GET /api/v2/links/{short_code}/ads", s.getLinkAdStats)
+	mux.HandleFunc("GET /api/v2/ads/stats", s.getAdStats)
 	mux.HandleFunc("DELETE /api/v2/links/delete/{short_code}", s.deleteLink)
 	mux.HandleFunc("GET /api/v2/health", s.health)
 	return mux
@@ -100,6 +107,18 @@ func buildShortURL(baseURL, shortCode string) string {
 	return strings.TrimRight(baseURL, "/") + "/" + shortCode
 }
 
+// prefersJSON сообщает, что клиенту нужен машинный ответ, а не HTML-баннер.
+func prefersJSON(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	if accept == "" {
+		return false
+	}
+	if strings.Contains(accept, "text/html") {
+		return false
+	}
+	return strings.Contains(accept, "application/json") || strings.Contains(accept, "*/*")
+}
+
 // renderRoutingPage исполняет шаблон страницы перехода.
 // Если определён ROUTING_PAGE_FILE и файл читается — шаблон берётся с диска
 // на каждый запрос (правки применяются без рестарта сервиса);
@@ -116,18 +135,6 @@ func (s *Server) renderRoutingPage(w http.ResponseWriter, data routingPageData) 
 	if err := routingPageTmpl.Execute(w, data); err != nil {
 		log.Printf("routing page: %v", err)
 	}
-}
-
-// adEntries читается из static/ads/ad_images.txt на каждый запрос,
-// чтобы правки списка баннеров и их ссылок применялись без рестарта.
-func (s *Server) adEntries() []adEntry {
-	return loadAdEntries(s.cfg)
-}
-
-// adTexts читается из файла на каждый запрос, чтобы правки
-// static/ads/ad_texts.txt применялись без рестарта сервиса.
-func (s *Server) adTexts() []string {
-	return loadAdTexts(s.cfg)
 }
 
 func isDigits(s string) bool {
@@ -232,12 +239,24 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	go s.recordClick(linkID, ip)
 
+	// Программные клиенты (curl, боты, превью-ссылок) получают обычный
+	// 302 без рекламы: экранного баннера им всё равно не показать, а
+	// лишняя страница ломает автоматизацию.
+	if prefersJSON(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, originalURL, http.StatusFound)
+		return
+	}
+
 	ad := "/ads/ad1.svg"
-	var adLink string
+	adKey := ""
 	if entries := s.adEntries(); len(entries) > 0 {
-		entry := entries[rand.Intn(len(entries))]
-		ad = "/ads/" + entry.Image
-		adLink = entry.Link
+		if entry, ok := pickAd(entries); ok {
+			ad = "/ads/" + entry.Image
+			adKey = entry.Key
+			s.adStats.Record(entry.Key, adEventImpression, linkID)
+			s.adStats.Record(entry.Key, adEventImpression, 0)
+		}
 	}
 	adText := ""
 	if texts := s.adTexts(); len(texts) > 0 {
@@ -247,11 +266,15 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+
 	s.renderRoutingPage(w, routingPageData{
 		TargetURL: originalURL,
 		AdImage:   ad,
-		AdLink:    adLink,
-		AdText:    adText,
+		// В шаблон уходит не ссылка рекламодателя, а адрес счётчика клика:
+		// иначе сервер не узнаёт о клике и CTR не измеряется.
+		AdLink: adClickURL(adKey, linkID),
+		AdText: adText,
 	})
 }
 

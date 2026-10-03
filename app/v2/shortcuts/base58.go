@@ -11,6 +11,13 @@ const (
 	length   = 7
 )
 
+// CodeLength — длина короткого кода (совпадает с regex-локацией nginx
+// "^/[0-9a-zA-Z]{7}$" и с колонкой short_code).
+const CodeLength = length
+
+// Alphabet — алфавим генерации, экспортирован для тестов.
+const Alphabet = alphabet
+
 const MaxAttempts = 5
 
 var _ shorter = (*base58)(nil)
