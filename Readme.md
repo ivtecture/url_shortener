@@ -211,11 +211,25 @@ url_shorter/
 │   └── Dockerfile
 ├── docs/
 │   └── ARCHITECTURE.md      # архитектурные решения
+├── tests/                   # автотесты (pytest): лимит, гонка, 410, кэш
 ├── Dockerfile               # образ приложения (python:3.12-alpine)
 ├── docker-compose.yml       # app + redis + nginx, healthchecks, тома
 ├── requirements.txt
+├── requirements-dev.txt     # pytest + pytest-asyncio
+├── pytest.ini
 └── .env.example             # шаблон переменных окружения
 ```
+
+## Тесты
+
+Автотесты (pytest + pytest-asyncio; Redis подменяется in-memory-заглушкой, SQLite живёт во временном файле):
+
+```cmd
+pip install -r requirements-dev.txt
+pytest
+```
+
+Покрывают: лимит переходов (создание, остаток, исчерпание, 410 Gone в форматах JSON и HTML), гонку на границе лимита (параллельные переходы — ровно `max_clicks` × 302), поведение кэша редиректа (прогрев, попадание без похода в БД, значения старого формата, мусор, инвалидация при удалении и исчерпании) и миграцию `clicks_left` для старых БД.
 
 ## Переменные окружения
 

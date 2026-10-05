@@ -6,7 +6,10 @@
 `/openapi.json` добавляются ещё в конструкторе приложения — конфликтов нет.
 
 Лимит переходов (вариант 9): при создании ссылке можно задать max_clicks=N.
-Как только счётчик analytics достигает N, очередной переход получает
+Остаток переходов хранится в links.clicks_left и резервируется одним
+атомарным UPDATE ... WHERE clicks_left > 0 — без агрегата COUNT(*) по
+analytics на горячем пути редиректа и без гонки на границе лимита
+(замечания ревью). Как только остаток исчерпан, очередной переход получает
 410 Gone («лимит исчерпан»), а ссылка удаляется: analytics уходит каскадом,
 кэш редиректа инвалидируется. Дальнейшие запросы — обычный 404.
 """
@@ -115,6 +118,27 @@ async def purge_link(short_code: str) -> int:
     return deleted_rows
 
 
+async def reserve_click(link_id: int) -> bool:
+    """Атомарно зарезервировать один переход лимитированной ссылки.
+
+    Раньше здесь был SELECT COUNT(*) по analytics — агрегат на горячем пути
+    редиректа (при max_clicks = 1 000 000 это миллион агрегаций за жизнь
+    ссылки), к тому же выполнявшийся ДО фоновой INSERT'а аналитики: при
+    «остался 1 переход» два параллельных запроса оба получали 302 (гонка).
+
+    Теперь остаток живёт в links.clicks_left, и «проверить + занять» — это
+    одна атомарная инструкция: UPDATE ... WHERE clicks_left > 0. SQLite
+    сериализует запись, rowcount решает спор: ровно один из параллельных
+    запросов получает True (302), остальные — False (410).
+    """
+    reserved = await db.execute(
+        "UPDATE links SET clicks_left = clicks_left - 1 "
+        "WHERE id = ? AND clicks_left > 0",
+        (link_id,),
+    )
+    return reserved == 1
+
+
 def limit_exceeded_response(short_code: str, max_clicks: int, request: Request) -> Response:
     """410 Gone: HTML-страница для браузера, JSON detail — для API-клиентов."""
     if "text/html" in (request.headers.get("accept") or "").lower():
@@ -173,8 +197,9 @@ async def create_link(payload: LinkCreate) -> LinkResponse:
         short_code = generate_short_code()
         try:
             await db.execute(
-                "INSERT INTO links (short_code, original_url, max_clicks) VALUES (?, ?, ?)",
-                (short_code, original_url, payload.max_clicks),
+                "INSERT INTO links (short_code, original_url, max_clicks, clicks_left) "
+                "VALUES (?, ?, ?, ?)",
+                (short_code, original_url, payload.max_clicks, payload.max_clicks),
             )
             break
         except sqlite3.IntegrityError:
@@ -245,14 +270,16 @@ async def redirect_to_original(
             f"{link_id}:{max_clicks or 0}:{original_url}",
         )
 
-    # 3) Лимит переходов (вариант 9): счётчик analytics достиг max_clicks ->
-    #    410 «лимит исчерпан» + удаление ссылки (каскад + инвалидация кэша).
-    #    COUNT делается только для ссылок с лимитом; для остальных — ноль запросов.
+    # 3) Лимит переходов (вариант 9): атомарный резерв остатка.
+    #    COUNT(*) по analytics заменён на UPDATE links.clicks_left: для ссылок
+    #    с лимитом — одна дешёвая операция вместо агрегата на каждом переходе;
+    #    для ссылок без лимита — по-прежнему ноль запросов. Гонка на границе
+    #    лимита исключена самим UPDATE'ом: «проверил и занял» атомарно.
     if max_clicks is not None:
-        total_row = await db.fetch_one(
-            "SELECT COUNT(*) AS cnt FROM analytics WHERE link_id = ?", (link_id,)
-        )
-        if (total_row["cnt"] if total_row else 0) >= max_clicks:
+        if not await reserve_click(link_id):
+            # rowcount = 0: остаток исчерпан (либо ссылку удалили параллельно,
+            # пока кэш ещё отдавал живое значение, — отвечаем тем же 410,
+            # purge идемпотентен). Ссылка удаляется: каскад + инвалидация кэша.
             await purge_link(short_code)
             return limit_exceeded_response(short_code, max_clicks, request)
 
@@ -281,7 +308,7 @@ async def redirect_to_original(
 )
 async def get_stats(short_code: str) -> StatsResponse:
     link = await db.fetch_one(
-        "SELECT id, short_code, original_url, created_at, max_clicks "
+        "SELECT id, short_code, original_url, created_at, max_clicks, clicks_left "
         "FROM links WHERE short_code = ?",
         (short_code,),
     )
@@ -316,7 +343,10 @@ async def get_stats(short_code: str) -> StatsResponse:
         clicks=clicks,
         countries=countries,
         max_clicks=max_clicks,
-        clicks_left=max(0, max_clicks - clicks) if max_clicks is not None else None,
+        # Остаток хранится в links и резервируется атомарно на редиректе —
+        # не пересчитываем его из COUNT(*) (агрегат остался только тут,
+        # для общего числа переходов, которое не критично для лимита).
+        clicks_left=link["clicks_left"] if max_clicks is not None else None,
     )
 
 

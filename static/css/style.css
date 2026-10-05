@@ -210,6 +210,20 @@ body {
     color: #4a6a80;
 }
 
+/* невалидный лимит переходов: подсветка поля + красная подсказка */
+.field-shell.has-error .input-frame,
+.field-shell.has-error:focus-within .input-frame {
+    border-color: var(--error-brd) #ffffff #ffffff var(--error-brd);
+    box-shadow:
+        inset 1px 1px 3px rgba(160, 82, 82, .4),
+        0 0 10px 2px rgba(160, 82, 82, .55);
+}
+
+.field-shell.has-error .field-hint {
+    color: #8c2b2b;
+    font-weight: bold;
+}
+
 /* ---------- Bevel-кнопки ---------- */
 .btn {
     display: inline-block;

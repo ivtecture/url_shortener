@@ -111,6 +111,7 @@ function countryLabel(code) {
 const form = $("shorten-form");
 const urlInput = $("url-input");
 const limitInput = $("limit-input");
+const limitField = $("limit-field");
 const errorBox = $("error-box");
 const resultBox = $("result");
 const resultLimit = $("result-limit");
@@ -119,6 +120,23 @@ const copyBtn = $("copy-btn");
 const deleteBtn = $("delete-btn");
 const statsBtn = $("stats-btn");
 let currentCode = null;
+
+/* Лимит переходов (вариант 9): правила те же, что у API (pydantic) —
+   пусто = без лимита, иначе целое число от 1 до 1 000 000. */
+const LIMIT_MAX = 1000000;
+const LIMIT_HINT_TEXT = "Лимит — целое число от 1 до 1 000 000; пусто = без лимита.";
+
+function parseLimitValue(raw) {
+    const text = String(raw).trim();
+    if (!text) return { ok: true, limit: null };                  /* пусто = без лимита */
+    if (!/^\d+$/.test(text)) return { ok: false, limit: null };   /* мусор / дробное / минус */
+    const limit = parseInt(text, 10);
+    if (limit < 1 || limit > LIMIT_MAX) return { ok: false, limit: null };
+    return { ok: true, limit };
+}
+
+/* правка поля снимает подсветку ошибки лимита */
+limitInput.addEventListener("input", () => limitField.classList.remove("has-error"));
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -132,11 +150,19 @@ form.addEventListener("submit", async (event) => {
         return;
     }
 
-    /* Лимит переходов (вариант 9): пустое поле/мусор -> не отправляем (без лимита) */
+    /* Лимит переходов (вариант 9): невалидный ввод больше не уходит молча
+       как «без лимита» — подсвечиваем поле и показываем подсказку
+       (замечание ревью). */
+    const parsedLimit = parseLimitValue(limitInput.value);
+    if (!parsedLimit.ok) {
+        limitField.classList.add("has-error");
+        limitInput.focus();
+        showError(errorBox, LIMIT_HINT_TEXT);
+        return;
+    }
     const payload = { original_url: value };
-    const limit = parseInt(limitInput.value, 10);
-    if (Number.isInteger(limit) && limit > 0) {
-        payload.max_clicks = limit;
+    if (parsedLimit.limit !== null) {
+        payload.max_clicks = parsedLimit.limit;
     }
 
     const btn = $("shorten-btn");
