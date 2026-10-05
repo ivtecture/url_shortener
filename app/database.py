@@ -20,7 +20,10 @@ CREATE TABLE IF NOT EXISTS links (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     short_code   TEXT    NOT NULL UNIQUE,
     original_url TEXT    NOT NULL,
-    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    max_clicks   INTEGER,                             -- лимит переходов (NULL = без лимита)
+    clicks_left  INTEGER                              -- остаток переходов (NULL = без лимита);
+                                                      -- резервируется атомарно на редиректе
 );
 
 -- unique-ограничение уже создаёт индекс; явное имя оставлено для читаемости миграций
@@ -67,6 +70,37 @@ class Database:
     async def init_schema(self) -> None:
         """Создать таблицы/индексы, если их ещё нет (идемпотентно)."""
         await self._conn.executescript(SCHEMA_SQL)
+        await self._add_missing_columns()
+
+    async def _add_missing_columns(self) -> None:
+        """Мягкая миграция старых БД с docker-тома: колонки max_clicks, clicks_left.
+
+        CREATE TABLE IF NOT EXISTS не меняет уже существующую таблицу,
+        а файл SQLite переживает пересборку контейнера, поэтому нехватку
+        колонок добираем ALTER TABLE'ом при старте.
+        """
+        cursor = await self._conn.execute("PRAGMA table_info(links)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        await cursor.close()
+        if "max_clicks" not in columns:
+            await self._conn.execute("ALTER TABLE links ADD COLUMN max_clicks INTEGER")
+        if "clicks_left" not in columns:
+            await self._conn.execute("ALTER TABLE links ADD COLUMN clicks_left INTEGER")
+            # Бэкфилл остатка для уже живых лимитированных ссылок:
+            # остаток = лимит минус фактически накопленная аналитика
+            # (COUNT по analytics безопасен здесь — это разовая миграция,
+            # а не горячий путь). MAX(..., 0) — на случай уже исчерпанных
+            # ссылок, у которых переходов накопилось не меньше лимита.
+            await self._conn.execute(
+                """
+                UPDATE links
+                SET clicks_left = MAX(
+                    max_clicks - (SELECT COUNT(*) FROM analytics WHERE link_id = links.id),
+                    0
+                )
+                WHERE max_clicks IS NOT NULL AND clicks_left IS NULL
+                """
+            )
 
     async def close(self) -> None:
         if self._conn is not None:

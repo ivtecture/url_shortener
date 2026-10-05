@@ -92,7 +92,10 @@ CREATE TABLE IF NOT EXISTS links (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     short_code   TEXT    NOT NULL UNIQUE,              -- 7 символов base62
     original_url TEXT    NOT NULL,                     -- http/https, максимум 2048
-    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    max_clicks   INTEGER,                              -- лимит переходов, вариант 9 (NULL = бессрочная)
+    clicks_left  INTEGER                               -- остаток переходов (NULL = бессрочная);
+                                                        -- резервируется атомарно на редиректе
 );
 
 -- unique-ограничение уже создаёт индекс; отдельный CREATE INDEX не нужен,
@@ -112,6 +115,8 @@ CREATE INDEX IF NOT EXISTS idx_analytics_link_id ON analytics(link_id);
 -- составный индекс под агрегацию статистики (link_id + срез по времени)
 CREATE INDEX IF NOT EXISTS idx_analytics_link_clicked ON analytics(link_id, clicked_at);
 ```
+
+**Мягкая миграция:** `CREATE TABLE IF NOT EXISTS` не меняет уже существующую таблицу, а файл БД живёт на docker-томе между пересборками. При старте `app/database.py` проверяет `PRAGMA table_info(links)` и добавляет недостающие `max_clicks` и `clicks_left` через `ALTER TABLE`. Для ссылок, у которых лимит уже был задан, остаток бэкфиллится разовым `UPDATE`: `clicks_left = MAX(max_clicks - (SELECT COUNT(*) FROM analytics ...), 0)` — агрегат по `analytics` здесь безопасен именно потому, что выполняется один раз при старте, а не на горячем пути редиректа.
 
 **Обязательные PRAGMA при каждом подключении** (выполняются в `app/database.py`):
 
@@ -139,13 +144,17 @@ PRAGMA synchronous = NORMAL;    -- разумный баланс скорост�
 **Запрос** (`Content-Type: application/json`):
 
 ```json
-{ "original_url": "https://example.com/some/very/long/path?query=42&utm_source=mail" }
+{
+  "original_url": "https://example.com/some/very/long/path?query=42&utm_source=mail",
+  "max_clicks": 10
+}
 ```
 
 Правила валидации (pydantic):
 - обязательное поле `original_url`, строка;
 - валидный URL со схемой `http` или `https` (бизнес-правила: `ftp://`, `javascript:` и прочее — `400`);
 - длина ≤ 2048 символов;
+- опциональное `max_clicks` — лимит переходов (вариант 9), целое 1..1 000 000; не задано — ссылка бессрочная; нарушение границ → `422`;
 - пустое тело / не-JSON → `422` от pydantic автоматически.
 
 **Успех — 201 Created:**
@@ -155,7 +164,9 @@ PRAGMA synchronous = NORMAL;    -- разумный баланс скорост�
   "short_code": "aB3xK9z",
   "short_url": "http://localhost/aB3xK9z",
   "original_url": "https://example.com/some/very/long/path?query=42&utm_source=mail",
-  "created_at": "2026-09-03 08:00:00"
+  "created_at": "2026-09-03 08:00:00",
+  "max_clicks": 10,
+  "clicks_left": 10
 }
 ```
 
@@ -186,6 +197,7 @@ Cache-Control: no-store
 | Код | Случай | Тело |
 |-----|--------|------|
 | 404 | код не найден или ссылка удалена | `{"detail": "Ссылка не найдена"}` |
+| 410 | лимит переходов исчерпан (вариант 9): ссылка удаляется (каскад + `DEL` кэша); браузеру (Accept: text/html) — ретро-HTML-страница, API-клиенту — JSON | `{"detail": "Лимит переходов исчерпан (10 из 10), ссылка удалена"}` |
 
 ### 4.3. GET /api/v1/links/{short_code}/stats — статистика
 
@@ -202,9 +214,13 @@ Cache-Control: no-store
     { "country": "KZ", "count": 30 },
     { "country": "local", "count": 21 },
     { "country": "unknown", "count": 6 }
-  ]
+  ],
+  "max_clicks": 150,
+  "clicks_left": 22
 }
 ```
+
+`max_clicks`/`clicks_left` присутствуют только у ссылок с заданным лимитом (иначе `null`) — для бессрочных ссылок остаток не имеет смысла.
 
 Агрегирующий запрос:
 
@@ -272,10 +288,17 @@ def generate_short_code(length: int = 7) -> str:
 2. nginx: это не /static/* и не /api/v1/* ──> proxy_pass http://app:8000
    (nginx добавляет: X-Real-IP и X-Forwarded-For с IP клиента)
 3. app: GET url:aB3xK9z из Redis
-   ├── HIT  → original_url из кэша
-   └── MISS → SELECT original_url FROM links WHERE short_code = ?
-              └─ найдено → SETEX url:aB3xK9z 3600 <original_url>
+   ├── HIT  → link_id, max_clicks, original_url из кэша
+   └── MISS → SELECT id, original_url, max_clicks FROM links WHERE short_code = ?
+              └─ найдено → SETEX url:aB3xK9z 3600 "{id}:{max_clicks|0}:{url}"
               └─ не найдено → 404 {"detail": "Ссылка не найдена"} (конец)
+3а. app: лимит переходов (вариант 9), только если max_clicks задан:
+    UPDATE links SET clicks_left = clicks_left - 1
+    WHERE id = ? AND clicks_left > 0       -- «проверил и занял» атомарно
+    ├── rowcount = 1 → переход разрешён (гонки на границе лимита нет)
+    └── rowcount = 0 → остаток исчерпан (или ссылку удалили параллельно)
+       → DELETE ссылки + DEL url:aB3xK9z (идемпотентно)
+       → 410 Gone «лимит исчерпан»: браузеру ретро-HTML, API — JSON (конец)
 4. app: FastAPI BackgroundTasks — фоновая запись перехода (не тормозит ответ):
    a) IP клиента = первый адрес из заголовка X-Forwarded-For
       (за nginx подделать заголовок нельзя: nginx перезаписывает X-Real-IP;
@@ -297,9 +320,9 @@ def generate_short_code(length: int = 7) -> str:
 
 **Ключевые детали:**
 
-- **Кэш редиректа**: `url:{short_code}` → `original_url`, TTL 3600 с. Удаление ссылки делает `DEL` ключа — после этого кэш не «воскрешает» удалённую ссылку.
+- **Кэш редиректа**: `url:{short_code}` → `{link_id}:{max_clicks|0}:{original_url}`, TTL 3600 с — составное значение позволяет записать analytics без похода в БД при кэш-хите; для лимитированных ссылок на редиректе остаётся один атомарный `UPDATE clicks_left` (остаток живёт в SQLite — source of truth). Удаление ссылки (вручную или по исчерпании лимита) делает `DEL` ключа — кэш не «воскрешает» удалённую ссылку.
 - **Кэш гео**: `geo:{ip}` → ISO-код страны, TTL 86400 с (24 ч). Снижает число обращений к ip-api.com (бесплатный лимит — 45 запросов/мин с одного IP сервера) до ~«число уникальных IP в сутки».
-- **Честность данных**: запись в `analytics` идёт после отправки ответа (BackgroundTasks), потеря перехода при падении контейнера допустима — это осознанный компромисс скорости и точности.
+- **Честность данных**: запись в `analytics` идёт после отправки ответа (BackgroundTasks), потеря перехода при падении контейнера допустима — это осознанный компромисс скорости и точности. Лимит переходов от этого не страдает: остаток `clicks_left` резервируется синхронно, до отправки ответа, поэтому «перепроходить» исчерпанный лимит невозможно.
 - **Неблокирующий ответ**: даже при полностью лежащем гео-API редирект не задержится дольше 2 сек (таймаут httpx), страна будет `unknown`.
 
 ---
@@ -482,6 +505,7 @@ await navigator.clipboard.writeText(shortUrl);
 | 6 | **Нет дедупликации URL** — один и тот же длинный URL можно сокращать многократно | Упрощение: без пользователей некому «владеть» ссылкой; консолидация сломала бы раздельную статистику. |
 | 7 | **Потеря последних переходов при падении контейнера** (BackgroundTasks после ответа) | Приемлемо для аналитического счётчика. Полная надёжность потребовала бы очереди — исключена по стеку (без AMQP). |
 | 8 | **Redis as cache, не source of truth** — потеря кэша = промахи в SQLite | `maxmemory-policy allkeys-lru`, AOF-персистентность на томе `redis-data` для тёплого старта. Деградация производительная, не функциональная. |
+| 9 | **Лимит переходов (вариант 9)**: агрегат `COUNT(*)` по `analytics` на горячем пути редиректа (при `max_clicks` = 1 000 000 — миллион агрегаций за жизнь ссылки) и гонка у границы лимита | Заменён атомарным резервом остатка: `UPDATE links SET clicks_left = clicks_left - 1 WHERE id = ? AND clicks_left > 0` — одна дешёвая операция вместо агрегата, `rowcount` решает спор параллельных запросов (при «остался 1» ровно один получает 302). Остаток хранится в SQLite (source of truth), а не в Redis — сбой кэша не «открывает» исчерпанный лимит. Для бессрочных ссылок — по-прежнему ноль дополнительных запросов. |
 
 ---
 
@@ -493,6 +517,7 @@ await navigator.clipboard.writeText(shortUrl);
 | Редирект | `GET /{short_code}` (разделы 4.2, 6) |
 | Аналитика: переходы, геолокация | `GET /api/v1/links/{short_code}/stats` (раздел 4.3), поток 6 |
 | Удаление | `DELETE /api/v1/links/delete/{short_code}` (раздел 4.4) |
+| Ограничение количества переходов (вариант 9) | `max_clicks` в POST /api/v1/links + проверка на редиректе: 410 Gone + удаление ссылки (раздел 4.2, поток 6/3а) |
 | Без регистрации | анонимные эндпоинты, компромиссы 2–3 |
 | UI 2000-х, модалка, мем, холодные тона, анимация | раздел 8 |
 | Alpine, Redis, SQLite, Python, reverse proxy | разделы 1, 7 |

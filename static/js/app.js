@@ -110,13 +110,33 @@ function countryLabel(code) {
 
 const form = $("shorten-form");
 const urlInput = $("url-input");
+const limitInput = $("limit-input");
+const limitField = $("limit-field");
 const errorBox = $("error-box");
 const resultBox = $("result");
+const resultLimit = $("result-limit");
 const shortLink = $("short-link");
 const copyBtn = $("copy-btn");
 const deleteBtn = $("delete-btn");
 const statsBtn = $("stats-btn");
 let currentCode = null;
+
+/* Лимит переходов (вариант 9): правила те же, что у API (pydantic) —
+   пусто = без лимита, иначе целое число от 1 до 1 000 000. */
+const LIMIT_MAX = 1000000;
+const LIMIT_HINT_TEXT = "Лимит — целое число от 1 до 1 000 000; пусто = без лимита.";
+
+function parseLimitValue(raw) {
+    const text = String(raw).trim();
+    if (!text) return { ok: true, limit: null };                  /* пусто = без лимита */
+    if (!/^\d+$/.test(text)) return { ok: false, limit: null };   /* мусор / дробное / минус */
+    const limit = parseInt(text, 10);
+    if (limit < 1 || limit > LIMIT_MAX) return { ok: false, limit: null };
+    return { ok: true, limit };
+}
+
+/* правка поля снимает подсветку ошибки лимита */
+limitInput.addEventListener("input", () => limitField.classList.remove("has-error"));
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -130,6 +150,21 @@ form.addEventListener("submit", async (event) => {
         return;
     }
 
+    /* Лимит переходов (вариант 9): невалидный ввод больше не уходит молча
+       как «без лимита» — подсвечиваем поле и показываем подсказку
+       (замечание ревью). */
+    const parsedLimit = parseLimitValue(limitInput.value);
+    if (!parsedLimit.ok) {
+        limitField.classList.add("has-error");
+        limitInput.focus();
+        showError(errorBox, LIMIT_HINT_TEXT);
+        return;
+    }
+    const payload = { original_url: value };
+    if (parsedLimit.limit !== null) {
+        payload.max_clicks = parsedLimit.limit;
+    }
+
     const btn = $("shorten-btn");
     btn.disabled = true;
     btn.textContent = "Сокращаем...";
@@ -137,14 +172,21 @@ form.addEventListener("submit", async (event) => {
         const res = await fetch("/api/v1/links", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ original_url: value }),
+            body: JSON.stringify(payload),
         });
 
         if (res.status === 201) {
-            const data = await res.json(); /* { short_code, short_url, ... } */
+            const data = await res.json(); /* { short_code, short_url, max_clicks, ... } */
             currentCode = data.short_code;
             shortLink.textContent = data.short_url;
             shortLink.href = data.short_url;
+            if (data.max_clicks) {
+                resultLimit.textContent = "\u23F3 Лимит: " + data.max_clicks +
+                    " переходов, осталось " + data.clicks_left + ". После исчерпания ссылка удалится.";
+                resultLimit.classList.remove("hidden");
+            } else {
+                resultLimit.classList.add("hidden");
+            }
             resultBox.classList.remove("hidden");
             urlInput.select();
         } else {
@@ -186,6 +228,7 @@ const modal = $("stats-modal");
 const modalError = $("modal-error");
 const mCountries = $("m-countries");
 const mClicks = $("m-clicks");
+const mLimit = $("m-limit");
 const mShort = $("m-short");
 const mOriginal = $("m-original");
 const mCreated = $("m-created");
@@ -199,6 +242,7 @@ function openModal(code) {
     hideError(modalError);
     mCountries.innerHTML = '<tr class="empty-row"><td colspan="3">загрузка...</td></tr>';
     mClicks.textContent = "\u2026";
+    mLimit.classList.add("hidden");
     mShort.textContent = BASE_URL + "/" + code;
     mShort.href = BASE_URL + "/" + code;
     mOriginal.textContent = "";
@@ -221,6 +265,7 @@ async function loadStats() {
             const err = await res.json().catch(() => ({}));
             mCountries.innerHTML = "";
             mClicks.textContent = "0";
+            mLimit.classList.add("hidden");
             showError(modalError, extractErrorMessage(err.detail, "Статистика недоступна"));
             return;
         }
@@ -235,6 +280,14 @@ function renderStats(data) {
     mOriginal.textContent = data.original_url;
     mCreated.textContent = data.created_at;
     mClicks.textContent = data.clicks;
+
+    if (data.max_clicks) {
+        mLimit.textContent = "\u26A1 Лимит: " + data.max_clicks +
+            " \u00B7 осталось переходов: " + data.clicks_left;
+        mLimit.classList.remove("hidden");
+    } else {
+        mLimit.classList.add("hidden");
+    }
 
     if (!data.countries.length) {
         mCountries.innerHTML =

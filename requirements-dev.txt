@@ -1,0 +1,6 @@
+# Зависимости для автотестов (pytest.ini лежит в корне):
+#   pip install -r requirements-dev.txt
+#   pytest
+# pytest >= 9 и pytest-asyncio >= 1.4 — последние версии с поддержкой Python 3.14
+pytest==9.1.1
+pytest-asyncio==1.4.0
