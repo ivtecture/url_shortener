@@ -1,122 +1,130 @@
-/* ============================================================
-   ShortURL 2000 — ванильный JS без зависимостей.
-   1) печатающийся placeholder + мигающая каретка
-   2) создание ссылки  -> POST /api/v1/links
-   3) копирование      -> Clipboard API (+execCommand fallback)
-   4) модалка статистики -> GET /api/v1/links/{code}/stats
-   5) удаление         -> DELETE /api/v1/links/delete/{code}
-   6) ретро-счётчик посещений (localStorage)
-   ============================================================ */
 "use strict";
 
-/* ---------- Хелперы ---------- */
+// Все пути — только к активному API /api/v2/. Legacy /api/v1-legacy/*
+// фронтендом не используется.
+
+const API = "/api/v2";
+const TYPING_PLACEHOLDER = "https://example.com/very/long/url";
 
 const $ = (id) => document.getElementById(id);
 
-const BASE_URL = window.location.origin;
+const urlInput = $("url-input");
+const form = $("shorten-form");
+const errorBox = $("error-box");
+const resultBox = $("result");
+const shortLink = $("short-link");
+const shortenBtn = $("shorten-btn");
+const copyBtn = $("copy-btn");
+const statsBtn = $("stats-btn");
+const deleteBtn = $("delete-btn");
+const statsCodeInput = $("stats-code-input");
+const statsCodeBtn = $("stats-code-btn");
 
-function showError(boxEl, message) {
-    boxEl.textContent = message;
-    boxEl.classList.remove("hidden");
+const modal = $("stats-modal");
+const modalError = $("modal-error");
+const modalCodeLabel = $("modal-code-label");
+const modalCreated = $("modal-created");
+const modalOriginal = $("modal-original");
+const modalClicks = $("modal-clicks");
+const modalCountries = $("modal-countries");
+const modalAds = $("modal-ads");
+const modalRefreshBtn = $("modal-refresh-btn");
+
+let currentCode = null;
+let modalCode = null;
+let lastFocused = null;
+
+function showError(box, message) {
+    box.textContent = message;
+    box.classList.remove("hidden");
 }
 
-function hideError(boxEl) {
-    boxEl.classList.add("hidden");
+function hideError(box) {
+    box.classList.add("hidden");
+    box.textContent = "";
 }
 
-/* FastAPI отдаёт detail строкой (400/404/503) или массивом объектов (422 pydantic) */
-function extractErrorMessage(payload, fallback) {
-    if (typeof payload === "string" && payload) return payload;
-    if (Array.isArray(payload)) {
-        return payload
-            .map((e) => {
-                const where = Array.isArray(e.loc) ? e.loc.slice(1).join(".") : "";
-                return (where ? where + ": " : "") + (e.msg || "");
-            })
-            .join("; ");
+// detail бывает строкой (Go) и списком объектов (legacy-валидация pydantic).
+function extractErrorMessage(detail, fallback) {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+        const msg = detail[0] && detail[0].msg;
+        if (typeof msg === "string") return msg;
     }
     return fallback;
 }
 
-/* ISO-код страны -> эмодзи-флаг (только для A-Z); спец-значения -> спец-эмодзи */
-function countryLabel(code) {
-    if (code === "local") return "\uD83D\uDCBB local";
-    if (!code || code === "unknown") return "\u2753 unknown";
-    if (/^[A-Za-z]{2}$/.test(code)) {
-        const flag = code
-            .toUpperCase()
-            .split("")
-            .map((ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)))
-            .join("");
-        return flag + " " + code.toUpperCase();
-    }
-    return code;
+async function readErrorBody(res) {
+    const data = await res.json().catch(() => ({}));
+    return extractErrorMessage(data.detail, "Ошибка " + res.status);
 }
 
-/* ---------- 1) Печатающийся placeholder ---------- */
+/* ------------------------------------------------------------------ */
+/* Печатающийся placeholder                                             */
+/* ------------------------------------------------------------------ */
 
-(function typePlaceholder() {
-    const input = $("url-input");
-    const caret = $("fake-caret");
-    const phrases = [
-        "https://very-long-address.ru/forum/thread.php?id=42&page=1337",
-        "http://example.com/some/very/long/path?query=42&utm_source=mail",
-        "https://help.me.please.my.url.is.too.long.ua/download?file=setup.exe",
-    ];
-    let phraseIdx = 0;
-    let charIdx = 0;
-    let deleting = false;
+// При prefers-reduced-motion посимвольная печать отключается целиком:
+// пользователь сразу видит обычный placeholder.
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    function setPlaceholder(text) {
-        /* рисуем «печатанку» прямо в пустом поле */
-        input.setAttribute("placeholder", text);
-        caret.style.display = text || document.activeElement === input ? "none" : "inline";
-        if (document.activeElement === input) caret.style.display = "none";
-    }
+let typingTimer = null;
+let typingIndex = 0;
 
-    function tick() {
-        if (document.activeElement === input || input.value) {
-            /* не мешаем живому пользователю */
-            caret.style.display = "none";
-            input.setAttribute("placeholder", "");
-            window.setTimeout(tick, 900);
+function stopTyping() {
+    window.clearTimeout(typingTimer);
+    typingTimer = null;
+    typingIndex = 0;
+    urlInput.placeholder = "";
+    const hint = document.querySelector(".typing-hint");
+    if (hint) hint.remove();
+}
+
+function startTyping() {
+    stopTyping();
+    urlInput.placeholder = "";
+    const hint = document.createElement("span");
+    hint.className = "typing-hint";
+    hint.setAttribute("aria-hidden", "true");
+    hint.textContent = TYPING_PLACEHOLDER.slice(0, 1);
+    urlInput.parentElement.appendChild(hint);
+
+    typingTimer = window.setInterval(() => {
+        typingIndex += 1;
+        if (typingIndex >= TYPING_PLACEHOLDER.length) {
+            stopTyping();
+            urlInput.placeholder = TYPING_PLACEHOLDER;
             return;
         }
-        caret.style.display = "inline";
-        const phrase = phrases[phraseIdx];
-        if (!deleting) {
-            charIdx++;
-            setPlaceholder(phrase.slice(0, charIdx));
-            if (charIdx >= phrase.length) {
-                deleting = true;
-                window.setTimeout(tick, 2200); /* пауза, чтобы прочитать */
-                return;
-            }
-        } else {
-            charIdx--;
-            setPlaceholder(phrase.slice(0, charIdx));
-            if (charIdx <= 0) {
-                deleting = false;
-                phraseIdx = (phraseIdx + 1) % phrases.length;
-            }
-        }
-        window.setTimeout(tick, deleting ? 18 : 55);
+        hint.textContent = TYPING_PLACEHOLDER.slice(0, typingIndex + 1);
+    }, 90);
+}
+
+urlInput.addEventListener("focus", () => {
+    if (urlInput.value) return;
+    if (reduceMotion.matches) {
+        // Печать посимвольно отключена — показываем готовый placeholder.
+        urlInput.placeholder = TYPING_PLACEHOLDER;
+        return;
     }
+    startTyping();
+});
 
-    window.setTimeout(tick, 600);
-})();
+urlInput.addEventListener("input", stopTyping);
+urlInput.addEventListener("blur", stopTyping);
 
-/* ---------- 2) Создание ссылки ---------- */
+// Переключение настроек без перезагрузки: останавливаем анимацию.
+if (typeof reduceMotion.addEventListener === "function") {
+    reduceMotion.addEventListener("change", () => {
+        stopTyping();
+        if (!urlInput.value) {
+            urlInput.placeholder = reduceMotion.matches ? TYPING_PLACEHOLDER : "";
+        }
+    });
+}
 
-const form = $("shorten-form");
-const urlInput = $("url-input");
-const errorBox = $("error-box");
-const resultBox = $("result");
-const shortLink = $("short-link");
-const copyBtn = $("copy-btn");
-const deleteBtn = $("delete-btn");
-const statsBtn = $("stats-btn");
-let currentCode = null;
+/* ------------------------------------------------------------------ */
+/* Создание ссылки                                                      */
+/* ------------------------------------------------------------------ */
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -126,40 +134,40 @@ form.addEventListener("submit", async (event) => {
 
     const value = urlInput.value.trim();
     if (!value) {
-        showError(errorBox, "Введите URL — поле пустое!");
+        showError(errorBox, "Введите URL.");
+        urlInput.focus();
         return;
     }
 
-    const btn = $("shorten-btn");
-    btn.disabled = true;
-    btn.textContent = "Сокращаем...";
+    shortenBtn.disabled = true;
+    shortenBtn.textContent = "Сокращаем...";
     try {
-        const res = await fetch("/api/v1/links", {
+        const res = await fetch(API + "/links", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ original_url: value }),
         });
-
-        if (res.status === 201) {
-            const data = await res.json(); /* { short_code, short_url, ... } */
-            currentCode = data.short_code;
-            shortLink.textContent = data.short_url;
-            shortLink.href = data.short_url;
-            resultBox.classList.remove("hidden");
-            urlInput.select();
-        } else {
-            const err = await res.json().catch(() => ({}));
-            showError(errorBox, extractErrorMessage(err.detail, "Ошибка " + res.status));
+        if (res.status !== 201) {
+            showError(errorBox, await readErrorBody(res));
+            return;
         }
-    } catch (networkError) {
-        showError(errorBox, "Сервер недоступен. Проверьте, что nginx поднят :)");
+        const data = await res.json();
+        currentCode = data.short_code;
+        shortLink.textContent = data.short_url;
+        shortLink.href = data.short_url;
+        resultBox.classList.remove("hidden");
+        resultBox.scrollIntoView({ block: "nearest" });
+    } catch (_e) {
+        showError(errorBox, "Сервер недоступен.");
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-glyph">&#9986;</span> Сократить!';
+        shortenBtn.disabled = false;
+        shortenBtn.textContent = "Сократить!";
     }
 });
 
-/* ---------- 3) Копирование ---------- */
+/* ------------------------------------------------------------------ */
+/* Копирование                                                          */
+/* ------------------------------------------------------------------ */
 
 copyBtn.addEventListener("click", async () => {
     const text = shortLink.textContent;
@@ -167,7 +175,8 @@ copyBtn.addEventListener("click", async () => {
     try {
         await navigator.clipboard.writeText(text);
     } catch (_e) {
-        /* fallback для старых браузеров / http */
+        // Clipboard API доступен не во всех контекстах (http без TLS) —
+        // откатываемся на execCommand.
         const ta = document.createElement("textarea");
         ta.value = text;
         document.body.appendChild(ta);
@@ -176,135 +185,207 @@ copyBtn.addEventListener("click", async () => {
         document.body.removeChild(ta);
     }
     const old = copyBtn.textContent;
-    copyBtn.textContent = "\u2714 Скопировано!";
+    copyBtn.textContent = "Скопировано";
     window.setTimeout(() => (copyBtn.textContent = old), 1500);
 });
 
-/* ---------- 4) Модалка статистики ---------- */
+/* ------------------------------------------------------------------ */
+/* Удаление                                                             */
+/* ------------------------------------------------------------------ */
 
-const modal = $("stats-modal");
-const modalError = $("modal-error");
-const mCountries = $("m-countries");
-const mClicks = $("m-clicks");
-const mShort = $("m-short");
-const mOriginal = $("m-original");
-const mCreated = $("m-created");
-const modalCodeLabel = $("modal-code-label");
-let modalCode = null;
+deleteBtn.addEventListener("click", async () => {
+    if (!currentCode) return;
+    if (!window.confirm("Удалить ссылку " + currentCode + "?")) return;
+
+    hideError(errorBox);
+    try {
+        const res = await fetch(API + "/links/delete/" + encodeURIComponent(currentCode), {
+            method: "DELETE",
+        });
+        if (!res.ok) {
+            showError(errorBox, await readErrorBody(res));
+            return;
+        }
+        resultBox.classList.add("hidden");
+        shortLink.textContent = "";
+        shortLink.href = "#";
+        urlInput.value = "";
+        currentCode = null;
+    } catch (_e) {
+        showError(errorBox, "Сервер недоступен.");
+    }
+});
+
+/* ------------------------------------------------------------------ */
+/* Модалка статистики                                                   */
+/* ------------------------------------------------------------------ */
 
 function openModal(code) {
-    if (!code) return;
+    // Запоминаем элемент, который открыл модалку, только если он вне неё:
+    // иначе повторное открытие запомнило бы кнопку внутри модалки и после
+    // закрытия фокус упал бы на <body>.
+    const active = document.activeElement;
+    if (!modal.contains(active)) lastFocused = active;
     modalCode = code;
-    modalCodeLabel.textContent = code;
-    hideError(modalError);
-    mCountries.innerHTML = '<tr class="empty-row"><td colspan="3">загрузка...</td></tr>';
-    mClicks.textContent = "\u2026";
-    mShort.textContent = BASE_URL + "/" + code;
-    mShort.href = BASE_URL + "/" + code;
-    mOriginal.textContent = "";
-    mCreated.textContent = "";
     modal.classList.remove("hidden");
+    hideError(modalError);
+    modalRefreshBtn.focus();
     loadStats();
 }
 
 function closeModal() {
     modal.classList.add("hidden");
     modalCode = null;
+    if (lastFocused && typeof lastFocused.focus === "function") lastFocused.focus();
+}
+
+function renderCountries(countries) {
+    modalCountries.textContent = "";
+    if (!Array.isArray(countries) || countries.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 2;
+        td.className = "empty-cell";
+        td.textContent = "нет данных";
+        tr.appendChild(td);
+        modalCountries.appendChild(tr);
+        return;
+    }
+    for (const item of countries) {
+        const tr = document.createElement("tr");
+        const tdCountry = document.createElement("td");
+        tdCountry.className = "mono";
+        tdCountry.textContent = item.country || "unknown";
+        const tdCount = document.createElement("td");
+        tdCount.className = "mono";
+        tdCount.textContent = String(item.count);
+        tr.appendChild(tdCountry);
+        tr.appendChild(tdCount);
+        modalCountries.appendChild(tr);
+    }
+}
+
+function renderAds(ads) {
+    modalAds.textContent = "";
+    if (!ads) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 3;
+        td.className = "empty-cell";
+        td.textContent = "нет данных";
+        tr.appendChild(td);
+        modalAds.appendChild(tr);
+        return;
+    }
+    const cells = [
+        String(ads.impressions),
+        String(ads.clicks),
+        (ads.ctr * 100).toFixed(2) + "%",
+    ];
+    const tr = document.createElement("tr");
+    for (const value of cells) {
+        const td = document.createElement("td");
+        td.className = "mono";
+        td.textContent = value;
+        tr.appendChild(td);
+    }
+    modalAds.appendChild(tr);
 }
 
 async function loadStats() {
     if (!modalCode) return;
     hideError(modalError);
+    modalCodeLabel.textContent = modalCode;
+
     try {
-        const res = await fetch("/api/v1/links/" + encodeURIComponent(modalCode) + "/stats");
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            mCountries.innerHTML = "";
-            mClicks.textContent = "0";
-            showError(modalError, extractErrorMessage(err.detail, "Статистика недоступна"));
+        const [statsRes, adsRes] = await Promise.all([
+            fetch(API + "/links/" + encodeURIComponent(modalCode) + "/stats"),
+            fetch(API + "/links/" + encodeURIComponent(modalCode) + "/ads").catch(() => null),
+        ]);
+
+        if (!statsRes.ok) {
+            showError(modalError, await readErrorBody(statsRes));
             return;
         }
-        const data = await res.json();
-        renderStats(data);
+
+        const stats = await statsRes.json();
+        modalCodeLabel.textContent = stats.short_code || modalCode;
+        modalCreated.textContent = stats.created_at || "—";
+        modalOriginal.textContent = stats.original_url || "—";
+        modalClicks.textContent = String(stats.clicks);
+        renderCountries(stats.countries);
+
+        renderAds(adsRes && adsRes.ok ? await adsRes.json() : null);
     } catch (_e) {
-        showError(modalError, "Сервер недоступен");
+        showError(modalError, "Сервер недоступен.");
     }
 }
 
-function renderStats(data) {
-    mOriginal.textContent = data.original_url;
-    mCreated.textContent = data.created_at;
-    mClicks.textContent = data.clicks;
+statsBtn.addEventListener("click", () => {
+    if (currentCode) openModal(currentCode);
+});
 
-    if (!data.countries.length) {
-        mCountries.innerHTML =
-            '<tr class="empty-row"><td colspan="3">нет данных &mdash; по ссылке ещё никто не ходил</td></tr>';
+statsCodeBtn.addEventListener("click", () => {
+    const code = statsCodeInput.value.trim();
+    if (code.length !== 7) {
+        showError(errorBox, "Код состоит из 7 символов.");
         return;
     }
-
-    const max = Math.max(...data.countries.map((c) => c.count), 1);
-    mCountries.innerHTML = data.countries
-        .map(
-            (row) =>
-                "<tr><td>" + countryLabel(row.country) + "</td><td class=\"mono\">" + row.count +
-                '</td><td><span class="country-bar" style="width:' +
-                Math.max((row.count / max) * 100, 3) + '%"></span></td></tr>'
-        )
-        .join("");
-}
-
-statsBtn.addEventListener("click", () => openModal(currentCode));
-$("m-refresh").addEventListener("click", loadStats);
-$("m-close").addEventListener("click", closeModal);
-$("modal-close-x").addEventListener("click", closeModal);
-
-/* сайдбар: статистика по введённому коду */
-$("stats-code-btn").addEventListener("click", () => {
-    const code = $("stats-code-input").value.trim();
-    if (!/^[0-9a-zA-Z]{7}$/.test(code)) {
-        alert("Код должен состоять ровно из 7 символов (буквы/цифры).");
-        return;
-    }
+    hideError(errorBox);
     openModal(code);
 });
 
-/* закрытие: фон, Esc */
-modal.addEventListener("click", (event) => {
-    if (event.target === modal) closeModal();
-});
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
-});
-
-/* ---------- 5) Удаление ссылки ---------- */
-
-deleteBtn.addEventListener("click", async () => {
-    if (!currentCode) return;
-    if (!window.confirm("Удалить ссылку " + currentCode + " вместе со всей статистикой?")) return;
-
-    try {
-        const res = await fetch("/api/v1/links/delete/" + encodeURIComponent(currentCode), {
-            method: "DELETE",
-        });
-        if (res.ok) {
-            resultBox.classList.add("hidden");
-            currentCode = null;
-            alert("Ссылка удалена. Момент молчания по её переходам...");
-        } else {
-            const err = await res.json().catch(() => ({}));
-            showError(errorBox, extractErrorMessage(err.detail, "Не удалось удалить"));
-        }
-    } catch (_e) {
-        showError(errorBox, "Сервер недоступен");
+statsCodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        statsCodeBtn.click();
     }
 });
 
-/* ---------- 6) Ретро-счётчик посещений ---------- */
+modalRefreshBtn.addEventListener("click", loadStats);
+$("modal-close-x").addEventListener("click", closeModal);
+$("modal-close-btn").addEventListener("click", closeModal);
 
-(function visitCounter() {
-    const KEY = "shorturl2000_visits";
-    let visits = parseInt(window.localStorage.getItem(KEY) || "0", 10) || 0;
-    visits += 1;
-    window.localStorage.setItem(KEY, String(visits));
-    $("visit-counter").textContent = String(visits).padStart(6, "0");
-})();
+modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeModal();
+});
+
+// Ловушка фокуса: пока модалка открыта, Tab не должен уводить фокус
+// на страницу под ней — иначе клавиатурный пользователь «теряется».
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function modalFocusables() {
+    return Array.from(modal.querySelectorAll(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null && !el.disabled,
+    );
+}
+
+document.addEventListener("keydown", (event) => {
+    if (modal.classList.contains("hidden")) return;
+
+    if (event.key === "Escape") {
+        closeModal();
+        return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const items = modalFocusables();
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+
+    if (!modal.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+    }
+    if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+    }
+});

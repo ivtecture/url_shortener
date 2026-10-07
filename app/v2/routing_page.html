@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Переход по ссылке...</title>
+    <style>
+        /* Палитра и фактура те же, что на главной странице (static/css/style.css):
+           переход по короткой ссылке не должен выглядеть как чужой продукт. */
+        :root {
+            --bg: #101418;
+            --bg-deep: #0b0e11;
+            --panel: #1b2229;
+            --panel-alt: #212a33;
+            --slate: #2f4f4f;
+            --steel: #4682b4;
+            --steel-bright: #5b9bd0;
+            --light-steel: #b0c4de;
+            --text: #d7e3ef;
+            --text-dim: #9fb3c8;
+            --text-faint: #7d94a8;
+            --border-dark: #0d1114;
+            --border-light: #3c5568;
+            --mono: "DejaVu Sans Mono", "Liberation Mono", Consolas, "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 28px 16px;
+            font-family: "DejaVu Sans", "Liberation Sans", Arial, Helvetica, sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            background-color: var(--bg);
+            background-image:
+                repeating-linear-gradient(45deg,
+                    rgba(70, 130, 180, .04) 0 1px,
+                    transparent 1px 6px);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .panel {
+            width: 100%;
+            max-width: 460px;
+            background: var(--panel);
+            border: 1px solid var(--border-light);
+            border-radius: 3px;
+            box-shadow:
+                inset 1px 1px 0 rgba(176, 196, 222, .18),
+                inset -1px -1px 0 rgba(0, 0, 0, .55),
+                0 2px 6px rgba(0, 0, 0, .35);
+        }
+
+        .panel-caption {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 6px 10px;
+            font-family: var(--mono);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--light-steel);
+            background: linear-gradient(180deg, var(--slate) 0%, #263c3c 100%);
+            border-bottom: 1px solid var(--border-dark);
+            border-radius: 2px 2px 0 0;
+            text-shadow: 0 -1px 0 rgba(0, 0, 0, .5);
+        }
+
+        .panel-body { padding: 18px; }
+
+        .timer-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 18px;
+        }
+
+        .timer-wrap { position: relative; width: 132px; height: 132px; }
+
+        .ring { transform: rotate(-90deg); }
+        .ring-bg { fill: none; stroke: var(--slate); stroke-width: 8; }
+        .ring-progress { fill: none; stroke: var(--steel); stroke-width: 8; stroke-linecap: round; }
+
+        .timer-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--mono);
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--steel-bright);
+            text-shadow: 0 0 14px rgba(70, 130, 180, .35);
+        }
+
+        .timer-note {
+            margin-top: 12px;
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--text-faint);
+        }
+
+        .continue {
+            padding: 11px 30px;
+            font-family: var(--mono);
+            font-size: 14px;
+            font-weight: 700;
+            color: #0d1418;
+            background: linear-gradient(180deg, #7fb0d6 0%, #4682b4 100%);
+            border: 1px solid var(--border-dark);
+            border-radius: 3px;
+            box-shadow:
+                inset 1px 1px 0 rgba(255, 255, 255, .28),
+                inset -1px -1px 0 rgba(0, 0, 0, .4);
+            cursor: pointer;
+            transition: background .15s ease, transform .05s ease;
+        }
+
+        .continue:hover { background: linear-gradient(180deg, #93c0e2 0%, #5490c2 100%); }
+        .continue:active { transform: translateY(1px); }
+        .continue:focus-visible { outline: 2px solid var(--steel-bright); outline-offset: 2px; }
+
+        .ad-wrap {
+            border: 1px solid var(--slate);
+            border-radius: 2px;
+            overflow: hidden;
+            background: var(--panel-alt);
+        }
+
+        .ad-link { display: block; }
+
+        .ad {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: var(--bg-deep);
+        }
+
+        .ad-caption {
+            padding: 11px 14px;
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--text);
+            background: var(--panel-alt);
+            border-top: 1px solid var(--slate);
+        }
+
+        .ad-disclaimer {
+            padding: 8px 14px;
+            font-size: 11px;
+            color: var(--text-faint);
+            background: var(--bg-deep);
+            border-top: 1px solid var(--slate);
+        }
+
+        .footer-note {
+            margin-top: 14px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-faint);
+            text-align: center;
+        }
+
+        .hidden { display: none !important; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: .001ms !important;
+                transition-duration: .001ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<main class="panel">
+    <div class="panel-caption"><span>⚡ Переход по ссылке</span></div>
+    <div class="panel-body">
+
+        <div class="timer-view" id="timer-view">
+            <div class="timer-wrap" id="timer-wrap">
+                <svg class="ring" width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
+                    <circle class="ring-bg" cx="66" cy="66" r="58"></circle>
+                    <circle class="ring-progress" id="progress" cx="66" cy="66" r="58"></circle>
+                </svg>
+                <div class="timer-label" id="timer-label">5</div>
+            </div>
+            <button type="button" class="continue hidden" id="continue-btn">Продолжить &rarr;</button>
+            <p class="timer-note" id="timer-note">Ссылка откроется через несколько секунд</p>
+        </div>
+
+        <div class="ad-wrap">
+            {{if .AdLink}}<a class="ad-link" href="{{.AdLink}}" target="_blank" rel="noopener noreferrer nofollow"><img class="ad" id="ad-image" src="{{.AdImage}}" alt="Рекламный баннер"></a>{{else}}<img class="ad" id="ad-image" src="{{.AdImage}}" alt="Рекламный баннер">{{end}}
+            {{if .AdText}}<div class="ad-caption" id="ad-caption">{{.AdText}}</div>{{end}}
+            <div class="ad-disclaimer">Баннер и переход по нему учитываются в статистике рекламы</div>
+        </div>
+
+        <p class="footer-note">ShortURL 2000 &mdash; реклама на странице перехода</p>
+
+    </div>
+</main>
+
+<script>
+    "use strict";
+    // TARGET_URL подставляется html/template: значение экранируется
+    // как JS-литерал, поэтому инъекция через original_url невозможна.
+    var TARGET_URL = "{{.TargetURL}}";
+    var DURATION = 5;
+    var CIRC = 2 * Math.PI * 58;
+
+    var progress = document.getElementById("progress");
+    var label = document.getElementById("timer-label");
+    var continueBtn = document.getElementById("continue-btn");
+    progress.style.strokeDasharray = CIRC;
+    progress.style.strokeDashoffset = 0;
+
+    function go() {
+        window.location.href = TARGET_URL;
+    }
+
+    function finish() {
+        document.getElementById("timer-wrap").classList.add("hidden");
+        document.getElementById("timer-note").classList.add("hidden");
+        continueBtn.classList.remove("hidden");
+        continueBtn.focus();
+    }
+
+    var start = null;
+    function frame(now) {
+        if (start === null) start = now;
+        var elapsed = (now - start) / 1000;
+        if (elapsed >= DURATION) {
+            progress.style.strokeDashoffset = CIRC;
+            finish();
+            return;
+        }
+        progress.style.strokeDashoffset = CIRC * (elapsed / DURATION);
+        label.textContent = Math.ceil(DURATION - elapsed);
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    continueBtn.addEventListener("click", go);
+</script>
+</body>
+</html>
